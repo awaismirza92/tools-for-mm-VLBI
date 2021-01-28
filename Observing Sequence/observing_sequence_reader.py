@@ -1,7 +1,14 @@
 import pandas as pd
 
+file_address = 'input_files/c171a'
+# file_address = 'input_files/mb007'
+
+#%%
+#reading stations
+
+
 line_counter = 0
-with open('input_files/c171a.sum', 'r') as sum_file:
+with open(file_address + '.sum', 'r') as sum_file:
     for line in sum_file.readlines():
         line_counter += 1
         if line[0:24]== '   Plate tectonic motion':
@@ -20,23 +27,17 @@ skip_lines_end = line_counter - table_end_line_number
 
             
 col_names = ['Station', 'Code', 'Station motions [X]', 'Station motions [Y]', 
-             'Station motions [Z]', 'MJD0', 'Adjusted positions [X]', 'Adjusted positions [Y]', 
-             'Adjusted positions [Z]']            
+              'Station motions [Z]', 'MJD0', 'Adjusted positions [X]', 'Adjusted positions [Y]', 
+              'Adjusted positions [Z]']            
 
 sum_file = pd.read_csv('input_files/c171a.sum', skiprows = skip_lines_start, 
-                       skipfooter = skip_lines_end, 
-                       engine = 'python', names = col_names, sep='\s+', index_col=0)
+                        skipfooter = skip_lines_end, 
+                        engine = 'python', names = col_names, sep='\s+', index_col=0)
 
 # print(sum_file.shape)
-# print(sum_file)
+print(sum_file)
 
-# print(sum_file['Station'])
-# print(sum_file.loc[1:5, 'Station':'MJD0'])
-# print(sum_file.loc[:, ['Station', 'Adjusted positions [X]', 'Adjusted positions [Y]', 
-#              'Adjusted positions [Z]']])
 
-# print(sum_file[['Station', 'Adjusted positions [X]', 'Adjusted positions [Y]', 
-#              'Adjusted positions [Z]']])
 
 sum_adjusted_pos = sum_file[['Adjusted positions [X]', 'Adjusted positions [Y]', 
               'Adjusted positions [Z]']]
@@ -44,22 +45,22 @@ sum_adjusted_pos = sum_file[['Adjusted positions [X]', 'Adjusted positions [Y]',
 print(sum_adjusted_pos)
 
 
-# print(sum_file.loc['PICOVEL'])
-# print(sum_file['Code'])
+
 
 
 #%%
+#reading targets
 
-with open('input_files/c171a.vex.obs', 'r') as vex_file:
+with open(file_address + '.vex.obs', 'r') as vex_file:
     
     for line in vex_file.readlines():
         
         if 'exper_name' in line:
-            project_name = line.split('= ')[1][:-2]
-            print(project_name)
+            projectname = line.split('= ')[1][:-2]
+            # print(projectname)
             
         if 'source_name' in line:
-            print(line)
+            # print(line)
             direction = [line.split('= ')[1][:-2]]
             # print(direction)
             
@@ -73,22 +74,12 @@ with open('input_files/c171a.vex.obs', 'r') as vex_file:
             
             print('\n')
 
-
-#%%
-
-with open('input_files/c171a.key', 'r') as key_file:
-    for line in key_file.readlines():
-        if '!' not in line and 'SOURCE' in line and 'EQUINOX' in line:
-            line_parts = line.split('=')
-            direction = [line_parts[-1][1:-4], line_parts[2][:-4].rstrip(), line_parts[3][1:-8].rstrip() ]
-            print(direction)
-            
-            print('\n')
             
 
 #%%
+#reading scans
 
-with open('input_files/c171a.vex.obs', 'r') as vex_file:
+with open(file_address + '.vex.obs', 'r') as vex_file:
     
     for line in vex_file.readlines():
         
@@ -104,6 +95,9 @@ with open('input_files/c171a.vex.obs', 'r') as vex_file:
             start_time = line_parts[1][:-7]
             scan.append(start_time)
             
+            mode = line_parts[2][:8]
+            scan.append(mode)
+            
             source_name = line_parts[3][:-2]
             scan.append(source_name)
                         
@@ -116,7 +110,7 @@ with open('input_files/c171a.vex.obs', 'r') as vex_file:
             
             line_parts = line.split(':')
             
-            print(line_parts)
+            # print(line_parts)
             
             int_time = line_parts[2][2:-4]
             scan.append(int_time)
@@ -125,6 +119,92 @@ with open('input_files/c171a.vex.obs', 'r') as vex_file:
             
             print(scan) 
             
-            break
+            # break
     
     
+    
+#%%
+#reading modes    
+    
+with open(file_address + '.vex.obs', 'r') as vex_file:
+    vex_file_lines = vex_file.readlines()
+    for i, line in enumerate(vex_file_lines):
+        
+        if 'ref $PROCEDURES' in line:
+        
+            mode_name = vex_file_lines[i-1][4:-2]
+            mode = [mode_name]
+            
+            line_parts = line.split('=')
+            procedures = line_parts[1][1:-2]
+            mode.append(procedures)
+            
+            
+        if 'ref $FREQ' in line:
+        
+            line_parts = line.split('=')
+            freq = line_parts[1][1:-2]
+            mode.append(freq)
+            
+            
+        if 'ref $PASS_ORDER' in line:
+         
+            print(mode)    
+   
+            
+#%%           
+#reading frequency setup
+
+with open(file_address + '.vex.obs', 'r') as vex_file:
+    vex_file_lines = vex_file.readlines()
+    for i, line in enumerate(vex_file_lines):
+        
+        if '* mode =' in line and 'stations =' in line and 'sample_rate' in vex_file_lines[i+1] :
+            
+            freq_name = vex_file_lines[i-1][4:-2]
+            freq_setup = [freq_name]
+            
+            line_parts = line.split('=')
+            
+            mode_no = line_parts[1][1:3].lstrip()
+            freq_setup.append(mode_no)
+            
+            stations = line_parts[2][:-1]
+            freq_setup.append(stations)
+            
+           
+        if 'chan_def' in line:
+        
+            line_parts = line.split(':')
+            
+            ch_no = line_parts[4][2:-1]
+            freq_setup.append(ch_no)
+            
+            cent_freq = line_parts[1][1:-1]
+            freq_setup.append(cent_freq)
+            
+            bandwidth = line_parts[3][2:-1].lstrip()
+            freq_setup.append(bandwidth)
+            
+            pol = line_parts[-1][-4:-1]
+            freq_setup.append(pol)
+            
+                        
+        if 'enddef' in line and 'chan_def' in vex_file_lines[i-1]:
+            
+            print(freq_setup)
+            print('\n')
+            
+#%%        
+#wrapper
+
+# name of the array ('GMVA', 'EHT' or a user-defined name) 
+array='GMVA'
+
+
+#%%
+#simulation code
+
+#Create new MS.
+sm.open(projectname)
+sm.setconfig(telescopename=array, x=xx, y=yy, z=zz, dishdiameter=diam, mount='alt-az', antname=pads, coordsystem='global', referencelocation=pos)
