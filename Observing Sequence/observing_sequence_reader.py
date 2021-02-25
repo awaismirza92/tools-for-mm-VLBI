@@ -172,11 +172,11 @@ print(SEFD)
 #%%
 #Calculating reference position of the antenna configuration
 
-cofa_x = pl.average(x_adj)
-cofa_y = pl.average(y_adj)
-cofa_z = pl.average(z_adj)
-cofa_lat,cofa_lon,cofa_alt = u.xyz2long(cofa_x, cofa_y, cofa_z, 'WGS84')
-pos_obs = me.position("WGS84",qa.quantity(cofa_lon, "rad"), qa.quantity(cofa_lat, "rad"), qa.quantity(cofa_alt, "m"))
+# cofa_x = pl.average(x_adj)
+# cofa_y = pl.average(y_adj)
+# cofa_z = pl.average(z_adj)
+# cofa_lat,cofa_lon,cofa_alt = u.xyz2long(cofa_x, cofa_y, cofa_z, 'WGS84')
+# pos_obs = me.position("WGS84",qa.quantity(cofa_lon, "rad"), qa.quantity(cofa_lat, "rad"), qa.quantity(cofa_alt, "m"))
 
 
 
@@ -222,7 +222,7 @@ with open(file_address + '.vex.obs', 'r') as vex_file:
         if 'exper_name' in line:
             project_name = line.split('= ')[1][:-2]
             # print(projectname)
-
+ 
         if 'source_name' in line:
             # print(line)
             direction = [line.split('= ')[1][:-2]]
@@ -336,8 +336,8 @@ with open(file_address + '.vex.obs', 'r') as vex_file:
             
             n_channels = line_parts_equal[1][12:14]
             if 'x' in n_channels:
-                n_channels = n_channels[:-1]
-            freq_n_channels.append(n_channels)
+                n_channels = int(n_channels[:-1])
+            freq_n_channels.append(int(n_channels))
             
             
             line_parts_colon = line.split(':')
@@ -360,7 +360,7 @@ with open(file_address + '.vex.obs', 'r') as vex_file:
         if 'ref $PASS_ORDER' in line:
             mode['freq'] = mode_freq
             mode['n_channels'] = freq_n_channels
-            mode['delta_freq'] = freq_bandwidth
+            mode['freq_resolution'] = freq_bandwidth
             # mode['stations'] = freq_stations
             
             modes.append(mode)
@@ -450,13 +450,37 @@ print(participating_stations_names)
 print(scan['mode'])
 # print(mode['mode_name' = scan['mode']])
 
+scan['freq'] = []
+scan['freq_resolution'] = []
+scan['n_channels'] = []
+
 for mode in modes:
     if mode['mode_name'] == scan['mode']:
-        for station_set in mode['stations']:
-            print(all(station in station_set for station in scan['mode']))
+        for ind, station_set in enumerate(mode['stations']):
+            for station_i in station_set:
+                for station_j in scan['participating_stations']:
+                    if station_i == station_j:
+                        if mode['freq'][ind] not in scan['freq']:
+                            scan['freq'].append(mode['freq'][ind])
+                            
+                        if mode['freq_resolution'][ind] not in scan['freq_resolution']:
+                            scan['freq_resolution'].append(mode['freq_resolution'][ind])
+                            
+                        if mode['n_channels'][ind] not in scan['n_channels']:
+                            scan['n_channels'].append(mode['n_channels'][ind])
+            
             
             # scan_freq = mode['freq']
+print(scan['freq'])
 
+# scan['freq'] = f"{float(scan['freq'][0][:-3])/1e3}GHz"
+
+print("{}GHz".format(float(scan['freq'][0][:-3])/1e3))
+print(scan['freq_resolution'])
+print(scan['n_channels'])
+
+scan['delta_freq'] = str(float(scan['freq_resolution'][0][:-3]) * scan['n_channels'][0]) + ' MHz'
+print(scan['delta_freq'])
 
   # %% 
 
@@ -502,8 +526,8 @@ sm.setconfig(
 #Initialize spectral windows. Here we get to set a name for each band.
 sm.setspwindow(
     spwname = scan['mode'], 
-    freq = freq, 
-    deltafreq = deltafreq, 
-    freqresolution = freqresolution, 
-    nchannels = nchannels, 
+    freq = "{}GHz".format(float(scan['freq'][0][:-3])/1e3),    #Converting from MHz to GHz
+    deltafreq = scan['delta_freq'], 
+    freqresolution = scan['freq_resolution'][0], 
+    nchannels = scan['n_channels'][0], 
     stokes = 'RR LL')
