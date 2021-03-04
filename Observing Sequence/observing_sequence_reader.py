@@ -1,3 +1,4 @@
+from datetime import datetime
 import os
 import pylab as pl
 from simutil import simutil
@@ -154,7 +155,8 @@ with open(file_address + '.sum', 'r') as sum_file:
         print(station)
         
 print(x_adj_dic)
-        
+print(type(x_adj_dic.values()))
+print(x_adj_dic.values())        
 
 # %%        
 
@@ -172,11 +174,11 @@ print(SEFD)
 #%%
 #Calculating reference position of the antenna configuration
 
-# cofa_x = pl.average(x_adj)
-# cofa_y = pl.average(y_adj)
-# cofa_z = pl.average(z_adj)
-# cofa_lat,cofa_lon,cofa_alt = u.xyz2long(cofa_x, cofa_y, cofa_z, 'WGS84')
-# pos_obs = me.position("WGS84",qa.quantity(cofa_lon, "rad"), qa.quantity(cofa_lat, "rad"), qa.quantity(cofa_alt, "m"))
+cofa_x = pl.average(x_adj_dic.values())
+cofa_y = pl.average(x_adj_dic.values())
+cofa_z = pl.average(x_adj_dic.values())
+cofa_lat,cofa_lon,cofa_alt = u.xyz2long(cofa_x, cofa_y, cofa_z, 'WGS84')
+pos_obs = me.position("WGS84",qa.quantity(cofa_lon, "rad"), qa.quantity(cofa_lat, "rad"), qa.quantity(cofa_alt, "m"))
 
 
 
@@ -215,6 +217,8 @@ print(SEFD)
 # %%
 # reading targets
 
+sources = {}
+
 with open(file_address + '.vex.obs', 'r') as vex_file:
 
     for line in vex_file.readlines():
@@ -225,19 +229,30 @@ with open(file_address + '.vex.obs', 'r') as vex_file:
  
         if 'source_name' in line:
             # print(line)
-            direction = [line.split('= ')[1][:-2]]
+            source_name = line.split('= ')[1][:-2]
+            direction = [source_name]
+            # source = {'name': line.split('= ')[1][:-2]}
             # print(direction)
 
         if '*' not in line and 'ra =' in line:
             # print(line)
             coord_parts = line.split('= ')
-            direction.append(coord_parts[-1][:-2])
-            direction.append(coord_parts[1][:-6])
-            direction.append(
-                coord_parts[2][:-18].replace("'", 'm').replace('"', 's'))
+            
+            epoch = coord_parts[-1][:-2]
+            direction.append(epoch)
+            
+            RA = coord_parts[1][:-6]
+            direction.append(RA)
+            
+            Dec = coord_parts[2][:-18].replace("'", 'm').replace('"', 's')
+            direction.append(Dec)
+            
             print(direction)
-
             print('\n')
+            
+            sources[source_name] = [epoch, RA, Dec]
+            
+            # sources.append(source)
 
 
 # %%
@@ -245,6 +260,7 @@ with open(file_address + '.vex.obs', 'r') as vex_file:
 
 scan_stations_abbrev = []
 scan_stations_int_time = []
+scans = []
 
 with open(file_address + '.vex.obs', 'r') as vex_file:
 
@@ -265,10 +281,16 @@ with open(file_address + '.vex.obs', 'r') as vex_file:
             line_parts = line.split('=')
 
             start_time = line_parts[1][:-7]
+            start_time = datetime.strptime(start_time, '%Yy%jd%Hh%Mm%S')
+            start_time = start_time.strftime('%Y/%m/%d/%H:%M:%S')
+            
             scan['start_time'] = start_time
             # scan.append(start_time)
+            
 
             mode = line_parts[2][:8]
+            if ';' in mode:
+                mode = mode[:-1]
             scan['mode'] = mode
             # scan.append(mode)
 
@@ -293,18 +315,29 @@ with open(file_address + '.vex.obs', 'r') as vex_file:
         if 'endscan' in line:
             
             scan['participating_stations'] = scan_stations_abbrev
-            scan['stations_integration_time'] = scan_stations_int_time
+            scan['integration_time'] = scan_stations_int_time
             
             if 'REFERENCE_POINTING_DETERMINE' not in scan.values():
                 print('\n')
                 print(scan)
+                
+                scans.append(scan)
                 
             scan_stations_abbrev = []
             scan_stations_int_time = []
 
             # break
 
+# %%
 
+print(len(scans))
+
+count = 0
+for scan in scans:
+    if scan['mode'] == '3mm_RDBE':
+        count += 1
+
+print(count)
 # %%
 # reading modes
 
@@ -419,78 +452,90 @@ with open(file_address + '.vex.obs', 'r') as vex_file:
             
             
   # %% 
-participating_stations_names = []
+# participating_stations_names = []
 
-x_adj_scan = []
-y_adj_scan = []
-z_adj_scan = []
-SEFD_scan = []
-dia_scan = []
-for station_abbrev in scan['participating_stations']:
-    if station_abbrev in station_abbrev_dic.keys():
-        participating_stations_names.append(station_abbrev_dic[station_abbrev])
+# x_adj_scan = []
+# y_adj_scan = []
+# z_adj_scan = []
+# SEFD_scan = []
+# dia_scan = []
+# for station_abbrev in scan['participating_stations']:
+#     if station_abbrev in station_abbrev_dic.keys():
+#         participating_stations_names.append(station_abbrev_dic[station_abbrev])
     
-    x_adj_scan.append(x_adj_dic[station_abbrev])
-    y_adj_scan.append(y_adj_dic[station_abbrev])
-    z_adj_scan.append(z_adj_dic[station_abbrev])
+#     x_adj_scan.append(x_adj_dic[station_abbrev])
+#     y_adj_scan.append(y_adj_dic[station_abbrev])
+#     z_adj_scan.append(z_adj_dic[station_abbrev])
     
     
     
 
 
-for name in participating_stations_names:
-    SEFD_scan.append(SEFD_dic[name])
-    dia_scan.append(dia_dic[name])
+# for name in participating_stations_names:
+#     SEFD_scan.append(SEFD_dic[name])
+#     dia_scan.append(dia_dic[name])
 
-print(dia_scan) 
-print(SEFD_scan)    
+# print(dia_scan) 
+# print(SEFD_scan)    
     
-print(participating_stations_names)
-# scan['n_channels']
-print(scan['mode'])
-# print(mode['mode_name' = scan['mode']])
+# print(participating_stations_names)
+# # scan['n_channels']
+# print(scan['mode'])
+# # print(mode['mode_name' = scan['mode']])
 
-scan['freq'] = []
-scan['freq_resolution'] = []
-scan['n_channels'] = []
+# scan['freq'] = []
+# scan['freq_resolution'] = []
+# scan['n_channels'] = []
 
-for mode in modes:
-    if mode['mode_name'] == scan['mode']:
-        for ind, station_set in enumerate(mode['stations']):
-            for station_i in station_set:
-                for station_j in scan['participating_stations']:
-                    if station_i == station_j:
-                        if mode['freq'][ind] not in scan['freq']:
-                            scan['freq'].append(mode['freq'][ind])
+# for mode in modes:
+#     if mode['mode_name'] == scan['mode']:
+#         for ind, station_set in enumerate(mode['stations']):
+#             for station_i in station_set:
+#                 for station_j in scan['participating_stations']:
+#                     if station_i == station_j:
+#                         if mode['freq'][ind] not in scan['freq']:
+#                             scan['freq'].append(mode['freq'][ind])
                             
-                        if mode['freq_resolution'][ind] not in scan['freq_resolution']:
-                            scan['freq_resolution'].append(mode['freq_resolution'][ind])
+#                         if mode['freq_resolution'][ind] not in scan['freq_resolution']:
+#                             scan['freq_resolution'].append(mode['freq_resolution'][ind])
                             
-                        if mode['n_channels'][ind] not in scan['n_channels']:
-                            scan['n_channels'].append(mode['n_channels'][ind])
+#                         if mode['n_channels'][ind] not in scan['n_channels']:
+#                             scan['n_channels'].append(mode['n_channels'][ind])
             
             
-            # scan_freq = mode['freq']
-print(scan['freq'])
+#             # scan_freq = mode['freq']
+# print(scan['freq'])
 
-# scan['freq'] = f"{float(scan['freq'][0][:-3])/1e3}GHz"
+# # scan['freq'] = f"{float(scan['freq'][0][:-3])/1e3}GHz"
 
-print("{}GHz".format(float(scan['freq'][0][:-3])/1e3))
-print(scan['freq_resolution'])
-print(scan['n_channels'])
+# print("{}GHz".format(float(scan['freq'][0][:-3])/1e3))
+# print(scan['freq_resolution'])
+# print(scan['n_channels'])
 
-scan['delta_freq'] = str(float(scan['freq_resolution'][0][:-3]) * scan['n_channels'][0]) + ' MHz'
-print(scan['delta_freq'])
+# scan['delta_freq'] = str(float(scan['freq_resolution'][0][:-3]) * scan['n_channels'][0]) + ' MHz'
+# print(scan['delta_freq'])
 
+  # %% 
+
+
+# print(scans[0]['start_time'])
+# print(type(scans[0]['start_time']))
+
+
+
+# my_date = datetime.strptime(scans[0]['start_time'], '%Yy%jd%Hh%Mm%S')
+
+# my_date = my_date.strftime('%Y/%m/%d/%H:%M:%S')
+# print(my_date)
   # %% 
 
 #Calculating reference position of the antenna configuration
 
-cofa_x = pl.average(x_adj_scan)
-cofa_y = pl.average(y_adj_scan)
-cofa_z = pl.average(z_adj_scan)
-cofa_lat,cofa_lon,cofa_alt = u.xyz2long(cofa_x, cofa_y, cofa_z, 'WGS84')
-pos_obs = me.position("WGS84",qa.quantity(cofa_lon, "rad"), qa.quantity(cofa_lat, "rad"), qa.quantity(cofa_alt, "m"))
+# cofa_x = pl.average(x_adj_scan)
+# cofa_y = pl.average(y_adj_scan)
+# cofa_z = pl.average(z_adj_scan)
+# cofa_lat,cofa_lon,cofa_alt = u.xyz2long(cofa_x, cofa_y, cofa_z, 'WGS84')
+# pos_obs = me.position("WGS84",qa.quantity(cofa_lon, "rad"), qa.quantity(cofa_lat, "rad"), qa.quantity(cofa_alt, "m"))
 
 
 
@@ -514,20 +559,58 @@ os.system('rm -rf ' + project_name)
 sm.open(project_name)
 sm.setconfig(
     telescopename = array,
-    x = x_adj_scan,
-    y = y_adj_scan,
-    z = z_adj_scan,
-    dishdiameter = dia_scan,
+    x = x_adj_dic.values(),
+    y = y_adj_dic.values(),
+    z = z_adj_dic.values(),
+    dishdiameter = dia,
     mount = 'alt-az',
-    antname = participating_stations_names,
+    antname = station_names,
     coordsystem = 'global',
     referencelocation = pos_obs)
 
 #Initialize spectral windows. Here we get to set a name for each band.
 sm.setspwindow(
-    spwname = scan['mode'], 
-    freq = "{}GHz".format(float(scan['freq'][0][:-3])/1e3),    #Converting from MHz to GHz
-    deltafreq = scan['delta_freq'], 
-    freqresolution = scan['freq_resolution'][0], 
-    nchannels = scan['n_channels'][0], 
-    stokes = 'RR LL')
+    spwname = scans[0]['mode'], 
+    freq = modes[0]['freq'][0],                      #"{}GHz".format(float(scan['freq'][0][:-3])/1e3),    #Converting from MHz to GHz
+    deltafreq = modes[0]['freq_resolution'][0],      #scan['delta_freq'], 
+    freqresolution = modes[0]['freq_resolution'][0], #scan['freq_resolution'][0], 
+    nchannels = modes[0]['n_channels'][0],           #scan['n_channels'][0], 
+    stokes = 'RR LL')             
+
+
+elev_limit = 10.0 
+
+#Set Limits to flag data such as when source is below certain elevation.
+sm.setlimits(shadowlimit = 0.001, elevationlimit = str(elev_limit)+'deg') 
+
+sm.setfeed('perfect R L')         
+sm.setauto(autocorrwt = 0.0)  
+   
+
+for scan in scans:
+    
+    print('\n')
+    print(scan['scan_no'])
+    
+    #Initialize a source
+    sm.setfield(sourcename = scan['source_name'], 
+                sourcedirection = sources[scan['source_name']])
+      
+
+    
+    #setLimits, setfeed, setauto can be out of loop?
+    
+    #Set integration time and reference time for observation
+    sm.settimes(integrationtime = scan['integration_time'][0], 
+                usehourangle = False, 
+                referencetime = me.epoch('UTC', scan['start_time']))   #start times in UTC?
+
+	#Initialise observation
+    sm.observe(scan['source_name'], scans[0]['mode'], 
+                starttime = '0 s', 
+                stoptime = scan['integration_time'][0] + ' s')
+    
+    
+    
+    
+sm.close()
