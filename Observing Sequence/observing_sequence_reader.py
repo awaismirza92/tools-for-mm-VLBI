@@ -1,13 +1,29 @@
 from datetime import datetime
 import os
 import pylab as pl
+import time
+
+t_start = time.time()
+
+#%%
 from simutil import simutil
 u = simutil()
 
 #%%
-file_address = 'input_files/c171a'
+
+current_dir = os.getcwd()
+print(current_dir)
+
+if 'unsync_data' in current_dir:
+    file_address = '../input_files/c171a'
+
+else:
+    file_address = 'input_files/c171a'
+
+
 # file_address = 'input_files/mb007'
 
+print(file_address)
 
 #%%
 #Specifying values of SEFD & diameter
@@ -213,6 +229,23 @@ pos_obs = me.position("WGS84",qa.quantity(cofa_lon, "rad"), qa.quantity(cofa_lat
 
 # for station in stations_list:
 #     print(station)
+
+
+#%%
+#reading project name and integration time
+
+with open(file_address + '.vex.obs', 'r') as vex_file:
+
+    for line in vex_file.readlines():
+
+        if 'exper_name' in line:
+            project_name = line.split('= ')[1][:-2]
+            print(project_name)
+ 
+        if 'integr_time' in line:
+            # print(line)
+            integration_time = line.split(':')[1].lstrip().rstrip()
+            print(integration_time)
         
 # %%
 # reading targets
@@ -222,10 +255,6 @@ sources = {}
 with open(file_address + '.vex.obs', 'r') as vex_file:
 
     for line in vex_file.readlines():
-
-        if 'exper_name' in line:
-            project_name = line.split('= ')[1][:-2]
-            # print(projectname)
  
         if 'source_name' in line:
             # print(line)
@@ -546,17 +575,20 @@ with open(file_address + '.vex.obs', 'r') as vex_file:
 # wrapper
 
 # name of the array ('GMVA', 'EHT' or a user-defined name)
-array = 'GMVA'
+# array = 'GMVA'
+array = 'VLA'
 
 
 # %%
 # simulation code
 
+# os.system('cd unsync_data')
 
-os.system('rm -rf ' + project_name)
+
+os.system('rm -rf ' + project_name + '.ms')
 
 # Create new MS.
-sm.open(project_name)
+sm.open(project_name+ '-model.ms')
 sm.setconfig(
     telescopename = array,
     x = x_adj_dic.values(),
@@ -587,7 +619,7 @@ sm.setfeed('perfect R L')
 sm.setauto(autocorrwt = 0.0)  
    
 
-for scan in scans:
+for scan in scans[:10]:
     
     print('\n')
     print(scan['scan_no'])
@@ -601,7 +633,7 @@ for scan in scans:
     #setLimits, setfeed, setauto can be out of loop?
     
     #Set integration time and reference time for observation
-    sm.settimes(integrationtime = scan['integration_time'][0], 
+    sm.settimes(integrationtime = integration_time, 
                 usehourangle = False, 
                 referencetime = me.epoch('UTC', scan['start_time']))   #start times in UTC?
 
@@ -614,3 +646,62 @@ for scan in scans:
     
     
 sm.close()
+
+print((time.time() - t_start)/60)
+
+
+# %%
+
+print("Creating the model image with the filename: {} ."
+      .format('.modelimage.im'))
+
+# %%
+
+
+
+#Create a model image with point source
+for source_name, source_direction in sources.items():
+    
+    print("Creating the model image with the filename: {} ."
+          .format(source_name + '.modelimage.im'))
+    cl.done()
+    
+    input_model = 'point' #A string that could be either point, 
+                          #Gaussian, disk, or limbdarkeneddisk
+                          
+    cl.addcomponent(dir = source_direction, flux = 1.0, fluxunit = 'Jy', 
+                    freq = modes[0]['freq'][0], shape = input_model)
+    
+    ia.fromshape(outfile = source_name+'.modelimage.im', shape = [512,512,1,1], 
+                 overwrite = True)
+    cs = ia.coordsys()
+    cs.setunits(['rad','rad','','Hz'])
+    
+    pix_res = '10 arcsec'   
+    cell_rad = qa.convert(pix_res,"rad")['value']
+    print(cell_rad)
+    cs.setincrement([-cell_rad, cell_rad], 'direction')
+    cs.setreferencevalue([qa.convert(source_direction[1],'rad')['value'],
+                          qa.convert(source_direction[2],'rad')['value']], 
+                         type = "direction")
+    
+    cs.setreferencevalue(modes[0]['freq'][0], 'spectral')
+    cs.setincrement(qa.convert(modes[0]['freq_resolution'][0], 'GHz'), 'spectral')
+    ia.setcoordsys(cs.torecord())
+    ia.setbrightnessunit("Jy/pixel")
+    ia.modify(cl.torecord(), subtract=False)
+    exportfits(imagename=project_name+'.modelimage.im', 
+               fitsimage=project_name+'.modelimage.fits', overwrite=True)
+    
+    ia.close()
+    cl.done()
+
+
+# %%
+
+
+# import winsound
+
+# frequency = 2500  # Set Frequency To 2500 Hertz
+# duration = 1000  # Set Duration To 1000 ms == 1 second
+# winsound.Beep(frequency, duration)
