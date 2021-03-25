@@ -2,6 +2,7 @@ from datetime import datetime
 import os
 import pylab as pl
 import time
+import numpy as np
 
 t_start = time.time()
 
@@ -578,124 +579,196 @@ with open(file_address + '.vex.obs', 'r') as vex_file:
 # array = 'GMVA'
 array = 'VLA'
 
+ms_name = project_name + '.ms'
 
 # %%
 # simulation code
 
-# os.system('cd unsync_data')
+perform_observation = 'Yes'
+perform_observation = 'No'
 
-
-os.system('rm -rf ' + project_name + '.ms')
-
-# Create new MS.
-sm.open(project_name+ '-model.ms')
-sm.setconfig(
-    telescopename = array,
-    x = x_adj_dic.values(),
-    y = y_adj_dic.values(),
-    z = z_adj_dic.values(),
-    dishdiameter = dia,
-    mount = 'alt-az',
-    antname = station_names,
-    coordsystem = 'global',
-    referencelocation = pos_obs)
-
-#Initialize spectral windows. Here we get to set a name for each band.
-sm.setspwindow(
-    spwname = scans[0]['mode'], 
-    freq = modes[0]['freq'][0],                      #"{}GHz".format(float(scan['freq'][0][:-3])/1e3),    #Converting from MHz to GHz
-    deltafreq = modes[0]['freq_resolution'][0],      #scan['delta_freq'], 
-    freqresolution = modes[0]['freq_resolution'][0], #scan['freq_resolution'][0], 
-    nchannels = modes[0]['n_channels'][0],           #scan['n_channels'][0], 
-    stokes = 'RR LL')             
-
-
-elev_limit = 10.0 
-
-#Set Limits to flag data such as when source is below certain elevation.
-sm.setlimits(shadowlimit = 0.001, elevationlimit = str(elev_limit)+'deg') 
-
-sm.setfeed('perfect R L')         
-sm.setauto(autocorrwt = 0.0)  
    
+if perform_observation == 'Yes':
 
-for scan in scans[:10]:
+    os.system('rm -rf ' + ms_name)
     
-    print('\n')
-    print(scan['scan_no'])
+    # Create new MS.
+    sm.open(project_name+ '.ms')
+    sm.setconfig(
+        telescopename = array,
+        x = x_adj_dic.values(),
+        y = y_adj_dic.values(),
+        z = z_adj_dic.values(),
+        dishdiameter = dia,
+        mount = 'alt-az',
+        antname = station_names,
+        coordsystem = 'global',
+        referencelocation = pos_obs)
     
-    #Initialize a source
-    sm.setfield(sourcename = scan['source_name'], 
-                sourcedirection = sources[scan['source_name']])
-      
+    #Initialize spectral windows. Here we get to set a name for each band.
+    sm.setspwindow(
+        spwname = scans[0]['mode'], 
+        freq = modes[0]['freq'][0],                      #"{}GHz".format(float(scan['freq'][0][:-3])/1e3),    #Converting from MHz to GHz
+        deltafreq = modes[0]['freq_resolution'][0],      #scan['delta_freq'], 
+        freqresolution = modes[0]['freq_resolution'][0], #scan['freq_resolution'][0], 
+        nchannels = modes[0]['n_channels'][0],           #scan['n_channels'][0], 
+        stokes = 'RR LL')             
+    
+    
+    elev_limit = 10.0 
+    
+    #Set Limits to flag data such as when source is below certain elevation.
+    sm.setlimits(shadowlimit = 0.001, elevationlimit = str(elev_limit)+'deg') 
+    
+    sm.setfeed('perfect R L')         
+    sm.setauto(autocorrwt = 0.0)  
 
-    
-    #setLimits, setfeed, setauto can be out of loop?
-    
-    #Set integration time and reference time for observation
-    sm.settimes(integrationtime = integration_time, 
-                usehourangle = False, 
-                referencetime = me.epoch('UTC', scan['start_time']))   #start times in UTC?
 
-	#Initialise observation
-    sm.observe(scan['source_name'], scans[0]['mode'], 
-                starttime = '0 s', 
-                stoptime = scan['integration_time'][0] + ' s')
-    
-    
-    
-    
-sm.close()
 
-print((time.time() - t_start)/60)
+    for scan in scans[:]:
+        
+        print('\n')
+        print(scan['scan_no'])
+        
+        #Initialize a source
+        sm.setfield(sourcename = scan['source_name'], 
+                    sourcedirection = sources[scan['source_name']])
+          
+    
+        
+        #setLimits, setfeed, setauto can be out of loop?
+        
+        #Set integration time and reference time for observation
+        sm.settimes(integrationtime = integration_time, 
+                    usehourangle = False, 
+                    referencetime = me.epoch('UTC', scan['start_time']))   #start times in UTC?
+    
+    	#Initialise observation
+        sm.observe(scan['source_name'], scans[0]['mode'], 
+                    starttime = '0 s', 
+                    stoptime = scan['integration_time'][0] + ' s')
+    
+    
+    
+    
+    sm.close()
+    
+    print((time.time() - t_start)/60)
 
 
 # %%
 
-print("Creating the model image with the filename: {} ."
-      .format('.modelimage.im'))
+nAntennas = len(x_adj_dic)
+print(nAntennas)
 
 # %%
 
+# Now we compute the baseline lengths between the different antennae and
+    # finally compute the largest baseline length to be used to compute
+    # synthesised beam.  [lat,lon,el] (x, y, z) [m] are relative to the center
+    # of the array, oriented with x and y tangent to the closest point at the
+    # COFA (latitude, longitude) on the WGS84 reference ellipsoid, with z
+    # normal to the ellipsoid and y pointing north.
+cx = np.mean(x_adj_dic.values())
+cy = np.mean(y_adj_dic.values())
+cz = np.mean(z_adj_dic.values())
+nAntennas = len(x_adj_dic)
+lat, lon, el = u.itrf2loc(x_adj_dic.values(), y_adj_dic.values(), 
+                          z_adj_dic.values(), cx, cy, cz)
+mylengths = np.zeros(nAntennas * (nAntennas - 1) / 2)
+k = 0
+for i in range(nAntennas):
+    for j in range(i + 1, nAntennas):
+        x = lat[i] - lat[j]
+        y = lon[i] - lon[j]
+        z = el[i] - el[j]
+        mylengths[k] = np.sqrt((x**2 + y**2 + z**2))
+        k = k + 1
+lambd = np.round(300 / qa.quantity(modes[0]['freq'][0], 'MHz')['value'], 4)  # in m
+# print(lambd)
+# lambd = np.round(3e8 / (float(modes[0]['freq'][0][:-3]) * 1e6), 4)  # in m
+beam_max = np.round(np.amax(mylengths),  4)  # Longest baseline in m.
+
+pix_res = lambd / beam_max * 180 / np.pi * 3600
+pix_res = '{}'.format(pix_res) + 'arcsec'
+
+print(qa.quantity(modes[0]['freq'][0], 'GHz')['value'], modes[0]['freq'][0], 
+      modes[0]['freq'][0][:-3], lambd, beam_max, pix_res)
+
+# %%
+
+create_input_models = 'Yes'
+create_input_models = 'No'
+
+   
+if create_input_models == 'Yes':
 
 
-#Create a model image with point source
-for source_name, source_direction in sources.items():
-    
-    print("Creating the model image with the filename: {} ."
-          .format(source_name + '.modelimage.im'))
-    cl.done()
-    
-    input_model = 'point' #A string that could be either point, 
-                          #Gaussian, disk, or limbdarkeneddisk
-                          
-    cl.addcomponent(dir = source_direction, flux = 1.0, fluxunit = 'Jy', 
-                    freq = modes[0]['freq'][0], shape = input_model)
-    
-    ia.fromshape(outfile = source_name+'.modelimage.im', shape = [512,512,1,1], 
-                 overwrite = True)
-    cs = ia.coordsys()
-    cs.setunits(['rad','rad','','Hz'])
-    
-    pix_res = '10 arcsec'   
-    cell_rad = qa.convert(pix_res,"rad")['value']
-    print(cell_rad)
-    cs.setincrement([-cell_rad, cell_rad], 'direction')
-    cs.setreferencevalue([qa.convert(source_direction[1],'rad')['value'],
-                          qa.convert(source_direction[2],'rad')['value']], 
-                         type = "direction")
-    
-    cs.setreferencevalue(modes[0]['freq'][0], 'spectral')
-    cs.setincrement(qa.convert(modes[0]['freq_resolution'][0], 'GHz'), 'spectral')
-    ia.setcoordsys(cs.torecord())
-    ia.setbrightnessunit("Jy/pixel")
-    ia.modify(cl.torecord(), subtract=False)
-    exportfits(imagename=project_name+'.modelimage.im', 
-               fitsimage=project_name+'.modelimage.fits', overwrite=True)
-    
-    ia.close()
-    cl.done()
+    #Create a model image with point source
+    for source_name, source_direction in sources.items():
+        
+        print("Creating the model image with the filename: {} ."
+              .format(source_name + '.modelimage.im'))
+        cl.done()
+        
+        input_model = 'point' #A string that could be either point, 
+                              #Gaussian, disk, or limbdarkeneddisk
+                              
+        cl.addcomponent(dir = source_direction, flux = 1.0, fluxunit = 'Jy', 
+                        freq = modes[0]['freq'][0], shape = input_model)
+        
+        ia.fromshape(outfile = 'model_images/' + source_name+'.modelimage.im', 
+                     shape = [512,512,1,1], 
+                     overwrite = True)
+        cs = ia.coordsys()
+        cs.setunits(['rad','rad','','Hz'])
+        
+        # pix_res = '10 arcsec'   
+        cell_rad = qa.convert(pix_res,"rad")['value']
+        print(cell_rad)
+        cs.setincrement([-cell_rad, cell_rad], 'direction')
+        cs.setreferencevalue([qa.convert(source_direction[1],'rad')['value'],
+                              qa.convert(source_direction[2],'rad')['value']], 
+                             type = "direction")
+        
+        cs.setreferencevalue(modes[0]['freq'][0], 'spectral')
+        cs.setincrement(qa.convert(modes[0]['freq_resolution'][0], 'GHz'), 
+                        'spectral')
+        ia.setcoordsys(cs.torecord())
+        ia.setbrightnessunit("Jy/pixel")
+        ia.modify(cl.torecord(), subtract=False)
+        exportfits(imagename = 'model_images/' + source_name+'.modelimage.im', 
+                   fitsimage = 'model_images/' + source_name+'.modelimage.fits', 
+                   overwrite=True)
+        
+        ia.close()
+        cl.done()
 
+corrupt_model_data = 'Yes'
+corrupt_model_data = 'No'
+
+   
+if corrupt_model_data == 'Yes':
+
+    # Corrupt model image with voltage pattern, copy it to data column of
+    # Measurement Set.
+    
+    t_start = time.time()
+    
+    print("Corrupting model data with voltage pattern which is estimated "
+          + "separately for each antenna in the array.")
+    im.open(ms_name)
+    im.selectvis()
+    im.defineimage(nx = 512, ny = 512, cellx = pix_res, celly = pix_res, 
+                   facets = 2)
+    im. (dovp = True, usedefaultvp = True)
+    im.setoptions(ftmachine = 'mosaic')
+    im.ft(model = 'model_images/' + source_name + '.modelimage.im')
+    im.close()
+    im.open(thems = ms_name, usescratch = True)
+    uvsub(vis = ms_name, reverse = True)
+    im.close()
+    print((time.time() - t_start)/60)
 
 # %%
 
