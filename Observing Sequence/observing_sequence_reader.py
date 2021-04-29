@@ -15,8 +15,13 @@ u = simutil()
 current_dir = os.getcwd()
 print(current_dir)
 
-if 'unsync_data' in current_dir:
-    file_address = '../input_files/c171a'
+os.chdir('/mnt/e_drive/MEGA/MSc_Astrophysics/5th_Semester/Job/Codes/reading_files/')
+
+current_dir = os.getcwd()
+print(current_dir)
+
+if 'small_ms' in current_dir:
+    file_address = '../../input_files/c171a'
 
 else:
     file_address = 'input_files/c171a'
@@ -481,69 +486,7 @@ with open(file_address + '.vex.obs', 'r') as vex_file:
             print('\n')
             
             
-  # %% 
-# participating_stations_names = []
-
-# x_adj_scan = []
-# y_adj_scan = []
-# z_adj_scan = []
-# SEFD_scan = []
-# dia_scan = []
-# for station_abbrev in scan['participating_stations']:
-#     if station_abbrev in station_abbrev_dic.keys():
-#         participating_stations_names.append(station_abbrev_dic[station_abbrev])
-    
-#     x_adj_scan.append(x_adj_dic[station_abbrev])
-#     y_adj_scan.append(y_adj_dic[station_abbrev])
-#     z_adj_scan.append(z_adj_dic[station_abbrev])
-    
-    
-    
-
-
-# for name in participating_stations_names:
-#     SEFD_scan.append(SEFD_dic[name])
-#     dia_scan.append(dia_dic[name])
-
-# print(dia_scan) 
-# print(SEFD_scan)    
-    
-# print(participating_stations_names)
-# # scan['n_channels']
-# print(scan['mode'])
-# # print(mode['mode_name' = scan['mode']])
-
-# scan['freq'] = []
-# scan['freq_resolution'] = []
-# scan['n_channels'] = []
-
-# for mode in modes:
-#     if mode['mode_name'] == scan['mode']:
-#         for ind, station_set in enumerate(mode['stations']):
-#             for station_i in station_set:
-#                 for station_j in scan['participating_stations']:
-#                     if station_i == station_j:
-#                         if mode['freq'][ind] not in scan['freq']:
-#                             scan['freq'].append(mode['freq'][ind])
-                            
-#                         if mode['freq_resolution'][ind] not in scan['freq_resolution']:
-#                             scan['freq_resolution'].append(mode['freq_resolution'][ind])
-                            
-#                         if mode['n_channels'][ind] not in scan['n_channels']:
-#                             scan['n_channels'].append(mode['n_channels'][ind])
-            
-            
-#             # scan_freq = mode['freq']
-# print(scan['freq'])
-
-# # scan['freq'] = f"{float(scan['freq'][0][:-3])/1e3}GHz"
-
-# print("{}GHz".format(float(scan['freq'][0][:-3])/1e3))
-# print(scan['freq_resolution'])
-# print(scan['n_channels'])
-
-# scan['delta_freq'] = str(float(scan['freq_resolution'][0][:-3]) * scan['n_channels'][0]) + ' MHz'
-# print(scan['delta_freq'])
+ 
 
   # %% 
 
@@ -557,20 +500,7 @@ with open(file_address + '.vex.obs', 'r') as vex_file:
 
 # my_date = my_date.strftime('%Y/%m/%d/%H:%M:%S')
 # print(my_date)
-  # %% 
 
-#Calculating reference position of the antenna configuration
-
-# cofa_x = pl.average(x_adj_scan)
-# cofa_y = pl.average(y_adj_scan)
-# cofa_z = pl.average(z_adj_scan)
-# cofa_lat,cofa_lon,cofa_alt = u.xyz2long(cofa_x, cofa_y, cofa_z, 'WGS84')
-# pos_obs = me.position("WGS84",qa.quantity(cofa_lon, "rad"), qa.quantity(cofa_lat, "rad"), qa.quantity(cofa_alt, "m"))
-
-
-
-
-# print([x_adj[station_abbrev] for station_abbrev in scan['participating_stations']])
 
 # %%
 # wrapper
@@ -579,14 +509,23 @@ with open(file_address + '.vex.obs', 'r') as vex_file:
 # array = 'GMVA'
 array = 'VLA'
 
+project_name = project_name + '_10_scans'
+
 ms_name = project_name + '.ms'
 
 # %%
 # simulation code
 
 perform_observation = 'Yes'
-perform_observation = 'No'
+create_input_models = 'Yes'
+corrupt_model_data = 'Yes'
+create_noisy_ms == 'Yes'
 
+
+# perform_observation = 'No'
+# create_input_models = 'No'
+# corrupt_model_data = 'No'
+create_noisy_ms == 'No'
    
 if perform_observation == 'Yes':
 
@@ -625,7 +564,7 @@ if perform_observation == 'Yes':
 
 
 
-    for scan in scans[:]:
+    for scan in scans[:10]:
         
         print('\n')
         print(scan['scan_no'])
@@ -641,7 +580,7 @@ if perform_observation == 'Yes':
         #Set integration time and reference time for observation
         sm.settimes(integrationtime = integration_time, 
                     usehourangle = False, 
-                    referencetime = me.epoch('UTC', scan['start_time']))   #start times in UTC?
+                    referencetime = me.epoch('TAI', scan['start_time']))   #start times in UTC?
     
     	#Initialise observation
         sm.observe(scan['source_name'], scans[0]['mode'], 
@@ -655,11 +594,6 @@ if perform_observation == 'Yes':
     
     print((time.time() - t_start)/60)
 
-
-# %%
-
-nAntennas = len(x_adj_dic)
-print(nAntennas)
 
 # %%
 
@@ -697,8 +631,7 @@ print(qa.quantity(modes[0]['freq'][0], 'GHz')['value'], modes[0]['freq'][0],
 
 # %%
 
-create_input_models = 'Yes'
-create_input_models = 'No'
+
 
    
 if create_input_models == 'Yes':
@@ -714,7 +647,7 @@ if create_input_models == 'Yes':
         input_model = 'point' #A string that could be either point, 
                               #Gaussian, disk, or limbdarkeneddisk
                               
-        cl.addcomponent(dir = source_direction, flux = 1.0, fluxunit = 'Jy', 
+        cl.addcomponent(dir = source_direction, flux = 8.0, fluxunit = 'Jy', 
                         freq = modes[0]['freq'][0], shape = input_model)
         
         ia.fromshape(outfile = 'model_images/' + source_name+'.modelimage.im', 
@@ -744,8 +677,7 @@ if create_input_models == 'Yes':
         ia.close()
         cl.done()
 
-corrupt_model_data = 'Yes'
-corrupt_model_data = 'No'
+
 
    
 if corrupt_model_data == 'Yes':
@@ -761,15 +693,30 @@ if corrupt_model_data == 'Yes':
     im.selectvis()
     im.defineimage(nx = 512, ny = 512, cellx = pix_res, celly = pix_res, 
                    facets = 2)
-    im. (dovp = True, usedefaultvp = True)
+    im.setvp(dovp = True, usedefaultvp = True)
     im.setoptions(ftmachine = 'mosaic')
-    im.ft(model = 'model_images/' + source_name + '.modelimage.im')
+    im.ft(model = 'model_images/' + '3C84' + '.modelimage.im')
     im.close()
     im.open(thems = ms_name, usescratch = True)
     uvsub(vis = ms_name, reverse = True)
     im.close()
     print((time.time() - t_start)/60)
+    
+# Create noisy ms.
+if create_noisy_ms == 'Yes':
 
+    print("Visibilities added to Data column of MS. Now corrupting visibilities "
+          + "with previously computed rms noise. New noisy MS will be created.")
+    os.system('cp -r ' + projectname + ' ' + projectname + '.noisy.ms')
+    sm.openfromms(projectname + '.noisy.ms')
+    sm.setnoise(mode='simplenoise', simplenoise=sigma)
+    sm.corrupt()
+    
+
+print('perform_observation: ', perform_observation)
+print('create_input_models: ', create_input_models)
+print('corrupt_model_data: ', corrupt_model_data)
+print('create_noisy_ms: ', create_noisy_ms)
 # %%
 
 
