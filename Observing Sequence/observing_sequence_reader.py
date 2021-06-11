@@ -15,7 +15,7 @@ u = simutil()
 #%%
 #Specifying values of SEFD & diameter
 
-SEFD_dic = {'EFLSBERG' : 1000,
+SEFD_dic_name = {'EFLSBERG' : 1000,
             'EB_RDBE' : 1000,   
             'ONSALA60' : 5102,
             'YEBES40M' : 1667,
@@ -36,6 +36,27 @@ SEFD_dic = {'EFLSBERG' : 1000,
             'ALMA' : 68,
             'LMT' : 1714,
             'PdBure' : 818}
+
+SEFD_dic = {'Eb' : 1000, 
+            'On' : 5102,
+            'Ys' : 1667,
+            'Mh' : 17647,
+            'Ky' : 3226,
+            'Ku' : 3226,
+            'Kt' : 3226,     
+            'Gb' : 137,
+            'Nl' : 2500,           
+            'Br' : 2500,
+            'La' : 2500,
+            'Fd' : 2500,
+            'Pt' : 2500,
+            'Ov' : 2500,
+            'Kp' : 2500,
+            'PV' : 654,
+            'Mk' : 2500,
+            'Aa' : 68,
+            'Lm' : 1714,
+            'PB' : 818}
 
 
 # print(type(SEFD_dic.values()))
@@ -167,7 +188,7 @@ SEFD = []
 dia = []
 
 for name in station_names:
-    SEFD.append(SEFD_dic[name])
+    SEFD.append(SEFD_dic_name[name])
     dia.append(dia_dic[name])
 
 print(station_names)
@@ -275,7 +296,7 @@ with open(file_address + '.vex.obs', 'r') as vex_file:
 # reading scans
 
 scan_stations_abbrev = []
-scan_stations_int_time = []
+scan_stations_obs_time = []
 scans = []
 
 with open(file_address + '.vex.obs', 'r') as vex_file:
@@ -325,13 +346,13 @@ with open(file_address + '.vex.obs', 'r') as vex_file:
 
             # print(line_parts)
 
-            int_time = line_parts[2][2:-4]
-            scan_stations_int_time.append(int_time)
+            obs_time = int(line_parts[2][2:-4])
+            scan_stations_obs_time.append(obs_time)
 
         if 'endscan' in line:
             
             scan['participating_stations'] = scan_stations_abbrev
-            scan['integration_time'] = scan_stations_int_time
+            scan['observation_time'] = scan_stations_obs_time
             
             if 'REFERENCE_POINTING_DETERMINE' not in scan.values():
                 print('\n')
@@ -340,7 +361,7 @@ with open(file_address + '.vex.obs', 'r') as vex_file:
                 scans.append(scan)
                 
             scan_stations_abbrev = []
-            scan_stations_int_time = []
+            scan_stations_obs_time = []
 
             # break
 
@@ -466,6 +487,20 @@ with open(file_address + '.vex.obs', 'r') as vex_file:
             print(freq_setup)
             print('\n')
             
-            
+
+#%%
+#reading project name and integration time
+
+with open(file_address + '.vex.difx', 'r') as vex_file:
+
+    for line in vex_file.readlines():
+
+        if 'number_channels' in line:
+            nchannels = int(line.split(':')[1])
+            print('nchannels: ', nchannels)
+ 
+        if 'dual polarisation' in line:
+            npol = 2.0 
+            print('npol', npol)
  
 

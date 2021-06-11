@@ -48,10 +48,10 @@ corrupt_model_data = 'Yes'
 create_noisy_ms = 'Yes'
 
 
-perform_observation = 'No'
-create_input_models = 'No'
-corrupt_model_data = 'No'
-create_noisy_ms = 'No'
+# perform_observation = 'No'
+# create_input_models = 'No'
+# corrupt_model_data = 'No'
+# create_noisy_ms = 'No'
    
 if perform_observation == 'Yes':
 
@@ -111,7 +111,7 @@ if perform_observation == 'Yes':
     	#Initialise observation
         sm.observe(scan['source_name'], scans[0]['mode'], 
                     starttime = '0 s', 
-                    stoptime = scan['integration_time'][0] + ' s')
+                    stoptime = str(scan['observation_time'][0]) + ' s')
     
     
     
@@ -234,46 +234,82 @@ if corrupt_model_data == 'Yes':
 # Create noisy ms.
 if create_noisy_ms == 'Yes':
     
-    nchannels = 64
-    npol = 2.0  # Number of polarizations
+    print("Visibilities added to Data column of MS. Now corrupting visibilities "
+          + "with previously computed rms noise. New noisy MS will be created.")
+    
+    nbits = 2.0                             # ?
+    eta_c = (0.88 if nbits == 2 else 0.64)  #?
+    data_rate = 2048                        #?
+    
+    # nchannels = 64
+    # npol = 2.0              # Number of polarizations
     nbase = len(mylengths)  # Number of baselines
-    onsource_time = 10
+    # onsource_time = 10
     
     for scan in scans[:10]:
         
         print('\n')
-        print(scan['scan_no'])
+        print(scan['scan_no'])        
+        print(scan['participating_stations'])
         
-        scan['participating_stations']
-    
-    noise, onsource_time = vlbi_combinednoise(configfile, date=date,
-                                              totaltime=totaltime,
-                                              direction=direction,
-                                              deltafreq=deltafreq,
-                                              nbits=nbits, eta_c=eta_c,
-                                              elev_limit=elev_limit,
-                                              t_int=t_int,
-                                              calduration=calduration,
-                                              calcadence=calcadence)
-    
-    sigma = noise * np.sqrt(nchannels * npol * nbase * onsource_time *
-                            60 / qa.quantity(t_int, 's')['value'])
-    
-    print("Simple noise computed via rms due to thermal noise:"
-          + " {} Jy.".format(np.round(sigma, 4)))
-          
+        participating_stations_SEFDs = []
+        for station in scan['participating_stations']:
+            participating_stations_SEFDs.append(SEFD_dic[station])            
+        print(participating_stations_SEFDs)
+        
+        
+        participating_stations_SEFDs = np.array(participating_stations_SEFDs)       
+        SEFD_reciprocal = 1. / np.outer(participating_stations_SEFDs, participating_stations_SEFDs)
+        print(SEFD_reciprocal)
+        
+        
+        SEFD_star = 1 / np.sqrt(np.sum(SEFD_reciprocal))
+        print('SEFD_star:', SEFD_star)
+            
+        
+        print('Observation time: ', scan['observation_time'][0])
+        
+        
+        noise = ( ((1/eta_c) * SEFD_star) / 
+                np.sqrt(data_rate * scan['observation_time'][0] / 2))
+        print('Noise per scan:', noise)
+        
+        
+        integration_time_qa = qa.quantity(integration_time, 's')
+        # print(integration_time_qa['value'])
+        
+        
+        sigma = noise * np.sqrt(nchannels * npol * nbase * 
+                                scan['observation_time'][0] / 
+                                integration_time_qa['value'])
+        print('Sigma per scan: ', sigma)
+        
+        
     sigma = qa.quantity(sigma, 'Jy')
     
-
-    print("Visibilities added to Data column of MS. Now corrupting visibilities "
-          + "with previously computed rms noise. New noisy MS will be created.")
-    os.system('cp -r ' + projectname + ' ' + projectname + '.noisy.ms')
-    sm.openfromms(projectname + '.noisy.ms')
     
-    sm.setnoise(mode='simplenoise', simplenoise=sigma)
+    os.system('cp -r ' + ms_name + ' ' + ms_name + '.noisy.ms')
+    sm.openfromms(ms_name + '.noisy.ms')
+    sm.setfield()
+    sm.setnoise(mode = 'simplenoise', simplenoise = sigma)
     sm.corrupt()
+
+
+    # To invoke uv-domain primary beam convolution for heterogeneous arrays we
+    # set the fourier transform machine to mosaic.
+    
+    sm.setoptions(ftmachine="mosaic")
+    sm.done()
+    sm.close()
+    print(ms_name
+    + ".noisy.ms has been created which contains the visibilities of "
+    + ms_name + ".ms corrupted with thermal noise.")
+
     
 
+          
+    
+print('\n')
 print('perform_observation: ', perform_observation)
 print('create_input_models: ', create_input_models)
 print('corrupt_model_data: ', corrupt_model_data)
