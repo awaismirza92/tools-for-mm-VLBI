@@ -10,7 +10,7 @@ print(current_dir)
 current_dir = os.getcwd()
 print(current_dir)
 
-if 'small_ms' in current_dir:
+if 'small_ms' or 'per_scan_ms' in current_dir:
     file_address = '../../input_files/c171a'
 
 else:
@@ -35,9 +35,9 @@ execfile('../../simvlbiv2.3_borrows.py')
 # array = 'GMVA'
 array = 'VLA'
 
-project_name = project_name + '_10_scans'
+# project_name = project_name + '_10_scans'
 
-ms_name = project_name + '.ms'
+# ms_name = project_name + '.ms'
 
 # %%
 # simulation code
@@ -46,20 +46,61 @@ perform_observation = 'Yes'
 create_input_models = 'Yes'
 corrupt_model_data = 'Yes'
 create_noisy_ms = 'Yes'
+combine_measurment_sets = 'Yes'
 
 
-# perform_observation = 'No'
-# create_input_models = 'No'
-# corrupt_model_data = 'No'
-# create_noisy_ms = 'No'
+perform_observation = 'No'
+create_input_models = 'No'
+corrupt_model_data = 'No'
+create_noisy_ms = 'No'
+# combine_measurment_sets = 'No'
    
 if perform_observation == 'Yes':
 
-    os.system('rm -rf ' + ms_name)
+    # os.system('rm -rf ' + ms_name)
     
-    # Create new MS.
-    sm.open(project_name+ '.ms')
-    sm.setconfig(
+    # # Create new MS.
+    # sm.open(project_name+ '.ms')
+    # sm.setconfig(
+    #     telescopename = array,
+    #     x = x_adj_dic.values(),
+    #     y = y_adj_dic.values(),
+    #     z = z_adj_dic.values(),
+    #     dishdiameter = dia,
+    #     mount = 'alt-az',
+    #     antname = station_names,
+    #     coordsystem = 'global',
+    #     referencelocation = pos_obs)
+    
+    # #Initialize spectral windows. Here we get to set a name for each band.
+    # sm.setspwindow(
+    #     spwname = scans[0]['mode'], 
+    #     freq = modes[0]['freq'][0],                      #"{}GHz".format(float(scan['freq'][0][:-3])/1e3),    #Converting from MHz to GHz
+    #     deltafreq = modes[0]['freq_resolution'][0],      #scan['delta_freq'], 
+    #     freqresolution = modes[0]['freq_resolution'][0], #scan['freq_resolution'][0], 
+    #     nchannels = modes[0]['n_channels'][0],           #scan['n_channels'][0], 
+    #     stokes = 'RR LL')             
+    
+    
+    # elev_limit = 10.0 
+    
+    # #Set Limits to flag data such as when source is below certain elevation.
+    # sm.setlimits(shadowlimit = 0.001, elevationlimit = str(elev_limit)+'deg') 
+    
+    # sm.setfeed('perfect R L')         
+    # sm.setauto(autocorrwt = 0.0)  
+
+
+
+    for scan in scans[80:100]:
+        
+        ms_name = 'scan_' + scan['scan_no'] + '.ms'
+        
+        os.system('rm -rf ' + ms_name)
+    
+        # Create new MS.
+        sm.open(ms_name)
+        sm.setconfig(
         telescopename = array,
         x = x_adj_dic.values(),
         y = y_adj_dic.values(),
@@ -70,8 +111,8 @@ if perform_observation == 'Yes':
         coordsystem = 'global',
         referencelocation = pos_obs)
     
-    #Initialize spectral windows. Here we get to set a name for each band.
-    sm.setspwindow(
+        #Initialize spectral windows. Here we get to set a name for each band.
+        sm.setspwindow(
         spwname = scans[0]['mode'], 
         freq = modes[0]['freq'][0],                      #"{}GHz".format(float(scan['freq'][0][:-3])/1e3),    #Converting from MHz to GHz
         deltafreq = modes[0]['freq_resolution'][0],      #scan['delta_freq'], 
@@ -80,17 +121,16 @@ if perform_observation == 'Yes':
         stokes = 'RR LL')             
     
     
-    elev_limit = 10.0 
-    
-    #Set Limits to flag data such as when source is below certain elevation.
-    sm.setlimits(shadowlimit = 0.001, elevationlimit = str(elev_limit)+'deg') 
-    
-    sm.setfeed('perfect R L')         
-    sm.setauto(autocorrwt = 0.0)  
-
-
-
-    for scan in scans[:10]:
+        elev_limit = 10.0 
+        
+        #Set Limits to flag data such as when source is below certain elevation.
+        sm.setlimits(shadowlimit = 0.001, elevationlimit = str(elev_limit)+'deg') 
+        
+        sm.setfeed('perfect R L')         
+        sm.setauto(autocorrwt = 0.0)  
+        
+        
+        
         
         print('\n')
         print(scan['scan_no'])
@@ -118,7 +158,7 @@ if perform_observation == 'Yes':
     
     sm.close()
     
-    print((time.time() - t_start)/60)
+    # print((time.time() - t_start)/60)
 
 
 # %%
@@ -237,25 +277,26 @@ if create_noisy_ms == 'Yes':
     print("Visibilities added to Data column of MS. Now corrupting visibilities "
           + "with previously computed rms noise. New noisy MS will be created.")
     
-    nbits = 2.0                             # ?
-    eta_c = (0.88 if nbits == 2 else 0.64)  #?
-    data_rate = 2048                        #?
-    
-    # nchannels = 64
-    # npol = 2.0              # Number of polarizations
+    nbits = 2.0                             #It's standard to have two bits
+    eta_c = (0.88 if nbits == 2 else 0.64)  #Correlation efficient remains 0.88 if nbits = 2
     nbase = len(mylengths)  # Number of baselines
-    # onsource_time = 10
     
-    for scan in scans[:10]:
+    # data_rate = 2048                        
+    data_rate = (2.0 * qa.quantity(freq_setup[-2], 'MHz')['value'] 
+                    * npol * nbits * 2.0)
+        
+    
+    sigma_array = []
+    for scan in scans[80:100]:
         
         print('\n')
         print(scan['scan_no'])        
-        print(scan['participating_stations'])
+        # print(scan['participating_stations'])
         
         participating_stations_SEFDs = []
         for station in scan['participating_stations']:
             participating_stations_SEFDs.append(SEFD_dic[station])            
-        print(participating_stations_SEFDs)
+        # print(participating_stations_SEFDs)
         
         
         participating_stations_SEFDs = np.array(participating_stations_SEFDs)       
@@ -284,29 +325,79 @@ if create_noisy_ms == 'Yes':
                                 integration_time_qa['value'])
         print('Sigma per scan: ', sigma)
         
+        sigma_array.append(sigma)
         
-    sigma = qa.quantity(sigma, 'Jy')
+        
+        
+        
+        ms_name = 'scan_' + scan['scan_no'] + '.ms'
+        
+        
+        
+        sigma = qa.quantity(sigma, 'Jy')
+        
+        noisy_ms_name = ms_name[:-3] + '.noisy.ms'
+        
+        os.system('cp -r ' + ms_name + ' ' + noisy_ms_name)
+        sm.openfromms(noisy_ms_name)
+        # sm.setfield()
+        sm.setnoise(mode = 'simplenoise', simplenoise = sigma)
+        sm.corrupt()
+        
+        
+        # To invoke uv-domain primary beam convolution for heterogeneous arrays we
+        # set the fourier transform machine to mosaic.
+        
+        sm.setoptions(ftmachine="mosaic")
+        sm.done()
+        sm.close()
+        
+
+    print(sigma_array)
+        
+    print(freq_setup[-2][:-3])
+    print(data_rate)
     
     
-    os.system('cp -r ' + ms_name + ' ' + ms_name + '.noisy.ms')
-    sm.openfromms(ms_name + '.noisy.ms')
-    sm.setfield()
-    sm.setnoise(mode = 'simplenoise', simplenoise = sigma)
-    sm.corrupt()
+        
+    # sigma = qa.quantity(sigma, 'Jy')
+    
+    
+    # os.system('cp -r ' + ms_name + ' ' + ms_name + '.noisy.ms')
+    # sm.openfromms(ms_name + '.noisy.ms')
+    # sm.setfield()
+    # sm.setnoise(mode = 'simplenoise', simplenoise = sigma)
+    # sm.corrupt()
 
 
     # To invoke uv-domain primary beam convolution for heterogeneous arrays we
     # set the fourier transform machine to mosaic.
     
-    sm.setoptions(ftmachine="mosaic")
-    sm.done()
-    sm.close()
+    # sm.setoptions(ftmachine="mosaic")
+    # sm.done()
+    # sm.close()
+    
+    
     print(ms_name
     + ".noisy.ms has been created which contains the visibilities of "
     + ms_name + ".ms corrupted with thermal noise.")
 
-    
 
+print('\n')
+    
+if combine_measurment_sets == 'Yes':
+    
+    noisy_ms_name_list = []
+    for scan in scans[80:100]:
+        ms_name = 'scan_' + scan['scan_no'] + '.ms'
+        noisy_ms_name = ms_name[:-3] + '.noisy.ms'
+        
+        noisy_ms_name_list.append(noisy_ms_name)
+        
+    print(noisy_ms_name_list)
+    
+    
+    concat(vis = noisy_ms_name_list, concatvis = 'all_scans_combined.ms')
           
     
 print('\n')

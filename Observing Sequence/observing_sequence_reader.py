@@ -489,7 +489,7 @@ with open(file_address + '.vex.obs', 'r') as vex_file:
             
 
 #%%
-#reading project name and integration time
+#reading number of channels
 
 with open(file_address + '.vex.difx', 'r') as vex_file:
 
@@ -498,9 +498,13 @@ with open(file_address + '.vex.difx', 'r') as vex_file:
         if 'number_channels' in line:
             nchannels = int(line.split(':')[1])
             print('nchannels: ', nchannels)
- 
-        if 'dual polarisation' in line:
-            npol = 2.0 
-            print('npol', npol)
+
+
+#Number of polarizations has been hard coded to be equal to 2. If this parameter
+#needs to be made flexible later on, changes may be done in the following lines.
+
+        # if 'dual polarisation' in line:
+npol = 2.0 
+            # print('npol', npol)
  
 
