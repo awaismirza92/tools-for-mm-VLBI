@@ -52,45 +52,10 @@ combine_measurment_sets = 'Yes'
 perform_observation = 'No'
 create_input_models = 'No'
 corrupt_model_data = 'No'
-create_noisy_ms = 'No'
-# combine_measurment_sets = 'No'
+# create_noisy_ms = 'No'
+combine_measurment_sets = 'No'
    
 if perform_observation == 'Yes':
-
-    # os.system('rm -rf ' + ms_name)
-    
-    # # Create new MS.
-    # sm.open(project_name+ '.ms')
-    # sm.setconfig(
-    #     telescopename = array,
-    #     x = x_adj_dic.values(),
-    #     y = y_adj_dic.values(),
-    #     z = z_adj_dic.values(),
-    #     dishdiameter = dia,
-    #     mount = 'alt-az',
-    #     antname = station_names,
-    #     coordsystem = 'global',
-    #     referencelocation = pos_obs)
-    
-    # #Initialize spectral windows. Here we get to set a name for each band.
-    # sm.setspwindow(
-    #     spwname = scans[0]['mode'], 
-    #     freq = modes[0]['freq'][0],                      #"{}GHz".format(float(scan['freq'][0][:-3])/1e3),    #Converting from MHz to GHz
-    #     deltafreq = modes[0]['freq_resolution'][0],      #scan['delta_freq'], 
-    #     freqresolution = modes[0]['freq_resolution'][0], #scan['freq_resolution'][0], 
-    #     nchannels = modes[0]['n_channels'][0],           #scan['n_channels'][0], 
-    #     stokes = 'RR LL')             
-    
-    
-    # elev_limit = 10.0 
-    
-    # #Set Limits to flag data such as when source is below certain elevation.
-    # sm.setlimits(shadowlimit = 0.001, elevationlimit = str(elev_limit)+'deg') 
-    
-    # sm.setfeed('perfect R L')         
-    # sm.setauto(autocorrwt = 0.0)  
-
-
 
     for scan in scans[80:100]:
         
@@ -114,10 +79,10 @@ if perform_observation == 'Yes':
         #Initialize spectral windows. Here we get to set a name for each band.
         sm.setspwindow(
         spwname = scans[0]['mode'], 
-        freq = modes[0]['freq'][0],                      #"{}GHz".format(float(scan['freq'][0][:-3])/1e3),    #Converting from MHz to GHz
-        deltafreq = modes[0]['freq_resolution'][0],      #scan['delta_freq'], 
-        freqresolution = modes[0]['freq_resolution'][0], #scan['freq_resolution'][0], 
-        nchannels = modes[0]['n_channels'][0],           #scan['n_channels'][0], 
+        freq = modes[0]['freq'][0],                      
+        deltafreq = modes[0]['freq_resolution'][0],      
+        freqresolution = modes[0]['freq_resolution'][0], 
+        nchannels = modes[0]['n_channels'][0],           
         stokes = 'RR LL')             
     
     
@@ -185,8 +150,7 @@ for i in range(nAntennas):
         mylengths[k] = np.sqrt((x**2 + y**2 + z**2))
         k = k + 1
 lambd = np.round(300 / qa.quantity(modes[0]['freq'][0], 'MHz')['value'], 4)  # in m
-# print(lambd)
-# lambd = np.round(3e8 / (float(modes[0]['freq'][0][:-3]) * 1e6), 4)  # in m
+
 beam_max = np.round(np.amax(mylengths),  4)  # Longest baseline in m.
 
 pix_res = lambd / beam_max * 180 / np.pi * 3600
@@ -281,17 +245,15 @@ if create_noisy_ms == 'Yes':
     eta_c = (0.88 if nbits == 2 else 0.64)  #Correlation efficient remains 0.88 if nbits = 2
     nbase = len(mylengths)  # Number of baselines
     
-    # data_rate = 2048                        
-    data_rate = (2.0 * qa.quantity(freq_setup[-2], 'MHz')['value'] 
-                    * npol * nbits * 2.0)
+    
         
     
     sigma_array = []
-    for scan in scans[80:100]:
+    for scan in scans[0:20]:
         
         print('\n')
         print(scan['scan_no'])        
-        # print(scan['participating_stations'])
+        print(scan['participating_stations'])
         
         participating_stations_SEFDs = []
         for station in scan['participating_stations']:
@@ -300,16 +262,37 @@ if create_noisy_ms == 'Yes':
         
         
         participating_stations_SEFDs = np.array(participating_stations_SEFDs)       
-        SEFD_reciprocal = 1. / np.outer(participating_stations_SEFDs, participating_stations_SEFDs)
-        print(SEFD_reciprocal)
+        SEFD_reciprocal = 1. / np.outer(participating_stations_SEFDs, 
+                                        participating_stations_SEFDs)
+        # print(SEFD_reciprocal)
+        
+        
+        SEFD_reciprocal = np.tril(SEFD_reciprocal)
+        np.fill_diagonal(SEFD_reciprocal, 0)
         
         
         SEFD_star = 1 / np.sqrt(np.sum(SEFD_reciprocal))
         print('SEFD_star:', SEFD_star)
-            
+        print(SEFD_reciprocal)
+        
         
         print('Observation time: ', scan['observation_time'][0])
         
+        
+        
+        if ('Ky' in scan['participating_stations'] or 
+            'Ku' in scan['participating_stations'] or
+            'Kt' in scan['participating_stations']):
+            
+            no_lcp_chs = freq_defs[2]['no_lcp_ch']
+            # print('Korean station is present in this scan')
+            
+        else:
+            no_lcp_chs = freq_defs[0]['no_lcp_ch']
+        
+        data_rate = (no_lcp_chs * qa.quantity(freq_setup[-2], 'MHz')['value'] 
+                        * npol * nbits * 2.0)
+        print('Data rate: ', data_rate)
         
         noise = ( ((1/eta_c) * SEFD_star) / 
                 np.sqrt(data_rate * scan['observation_time'][0] / 2))
@@ -338,45 +321,28 @@ if create_noisy_ms == 'Yes':
         
         noisy_ms_name = ms_name[:-3] + '.noisy.ms'
         
-        os.system('cp -r ' + ms_name + ' ' + noisy_ms_name)
-        sm.openfromms(noisy_ms_name)
-        # sm.setfield()
+        # os.system('cp -r ' + ms_name + ' ' + noisy_ms_name)
+        # sm.openfromms(noisy_ms_name)
+        # # sm.setfield()
         sm.setnoise(mode = 'simplenoise', simplenoise = sigma)
-        sm.corrupt()
+        # sm.corrupt()
         
         
-        # To invoke uv-domain primary beam convolution for heterogeneous arrays we
-        # set the fourier transform machine to mosaic.
+        # # To invoke uv-domain primary beam convolution for heterogeneous arrays we
+        # # set the fourier transform machine to mosaic.
         
-        sm.setoptions(ftmachine="mosaic")
-        sm.done()
-        sm.close()
+        # sm.setoptions(ftmachine="mosaic")
+        # sm.done()
+        # sm.close()
         
 
     print(sigma_array)
         
     print(freq_setup[-2][:-3])
-    print(data_rate)
+    # print(data_rate)
     
     
-        
-    # sigma = qa.quantity(sigma, 'Jy')
-    
-    
-    # os.system('cp -r ' + ms_name + ' ' + ms_name + '.noisy.ms')
-    # sm.openfromms(ms_name + '.noisy.ms')
-    # sm.setfield()
-    # sm.setnoise(mode = 'simplenoise', simplenoise = sigma)
-    # sm.corrupt()
-
-
-    # To invoke uv-domain primary beam convolution for heterogeneous arrays we
-    # set the fourier transform machine to mosaic.
-    
-    # sm.setoptions(ftmachine="mosaic")
-    # sm.done()
-    # sm.close()
-    
+            
     
     print(ms_name
     + ".noisy.ms has been created which contains the visibilities of "

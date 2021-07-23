@@ -385,13 +385,18 @@ freq_stations = []
 
 modes = []
 
-with open(file_address + '.vex.obs', 'r') as vex_file:
+with open(file_address + '.vex.difx', 'r') as vex_file:
     vex_file_lines = vex_file.readlines()
     for i, line in enumerate(vex_file_lines):
 
         if 'ref $PROCEDURES' in line:
-
-            mode_name = vex_file_lines[i - 1][4:-2]
+            
+            if 'def' in vex_file_lines[i - 1]:
+                mode_name = vex_file_lines[i - 1][4:-2]
+                
+            if 'def' in vex_file_lines[i - 2]:
+                mode_name = vex_file_lines[i - 2][4:-2]
+            
             mode = {'mode_name': mode_name}
             mode['stations'] = []
 
@@ -445,7 +450,9 @@ with open(file_address + '.vex.obs', 'r') as vex_file:
 # %%
 # reading frequency setup
 
-with open(file_address + '.vex.obs', 'r') as vex_file:
+freq_defs = []
+
+with open(file_address + '.vex.difx', 'r') as vex_file:
     vex_file_lines = vex_file.readlines()
     for i, line in enumerate(vex_file_lines):
 
@@ -454,14 +461,24 @@ with open(file_address + '.vex.obs', 'r') as vex_file:
 
             freq_name = vex_file_lines[i - 1][4:-2]
             freq_setup = [freq_name]
+            freq_def = {'name': freq_name}
 
             line_parts = line.split('=')
 
             mode_no = line_parts[1][1:3].lstrip()
             freq_setup.append(mode_no)
+            freq_def['mode_no'] = mode_no
 
             stations = line_parts[2][:-1]
+            stations = stations.split(':')
             freq_setup.append(stations)
+            freq_def['stations'] = stations
+            
+            ch_nos = []
+            cent_freqs = []
+            side_bands = []
+            bandwidths = []
+            pols = []
 
         if 'chan_def' in line:
 
@@ -469,23 +486,52 @@ with open(file_address + '.vex.obs', 'r') as vex_file:
 
             ch_no = line_parts[4][2:-1]
             freq_setup.append(ch_no)
+            ch_nos.append(ch_no)
 
             cent_freq = line_parts[1][1:-1]
             freq_setup.append(cent_freq)
+            cent_freqs.append(cent_freq)
             
             side_band = line_parts[2][1:-1].lstrip()
             freq_setup.append(side_band)
+            side_bands.append(side_band)
 
             bandwidth = line_parts[3][2:-1].lstrip()
             freq_setup.append(bandwidth)
+            bandwidths.append(bandwidth)
 
             pol = line_parts[-1][-4:-1]
             freq_setup.append(pol)
+            pols.append(pol)
 
         if 'enddef' in line and 'chan_def' in vex_file_lines[i - 1]:
 
-            print(freq_setup)
+            # print(freq_setup)
+            
+            freq_def['ch_nos'] = ch_nos
+            freq_def['cent_freqs'] = cent_freqs
+            freq_def['side_bands'] = side_bands
+            freq_def['bandwidths'] = bandwidths
+            freq_def['pols'] = pols
+            
+            
+            freq_def['no_lcp_ch'] = freq_def['pols'].count('Lcp') 
+            freq_def['no_rcp_ch'] = freq_def['pols'].count('Rcp')
+            
+            # print(freq_def)       
+            
+            for item in freq_def.items():
+                print(item)
+            
             print('\n')
+            print('Channels with Lcp: ', freq_def['no_lcp_ch'])
+            print('Channels with Rcp: ', freq_def['no_rcp_ch'])
+            
+            
+            print('\n\n')
+            
+            
+            freq_defs.append(freq_def)
             
 
 #%%
