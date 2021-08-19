@@ -37,8 +37,8 @@ combine_measurment_sets = 'Yes'
 perform_observation = 'No'
 create_input_models = 'No'
 corrupt_model_data = 'No'
-create_noisy_ms = 'No'
-# combine_measurment_sets = 'No'
+# create_noisy_ms = 'No'
+combine_measurment_sets = 'No'
    
 if perform_observation == 'Yes':
     
@@ -166,7 +166,7 @@ if create_input_models == 'Yes':
         input_model = 'point' #A string that could be either point, 
                               #Gaussian, disk, or limbdarkeneddisk
                               
-        cl.addcomponent(dir = source_direction, flux = 8.0, fluxunit = 'Jy', 
+        cl.addcomponent(dir = source_direction, flux = 8000.0, fluxunit = 'Jy', 
                         freq = modes[0]['freq'][0], shape = input_model)
         
         ia.fromshape(outfile = 'model_images/' + source_name+'.modelimage.im', 
@@ -199,28 +199,7 @@ if create_input_models == 'Yes':
 
 
    
-if corrupt_model_data == 'Yes':
 
-    # Corrupting model image with voltage pattern, copy it to data column of
-    # Measurement Set.
-    
-    t_start = time.time()
-    
-    print("Corrupting model data with voltage pattern which is estimated "
-          + "separately for each antenna in the array.")
-    im.open(ms_name)
-    im.selectvis()
-    im.defineimage(nx = 512, ny = 512, cellx = pix_res, celly = pix_res, 
-                   facets = 2)
-    im.setvp(dovp = True, usedefaultvp = True)
-    im.setoptions(ftmachine = 'mosaic')
-    im.ft(model = 'model_images/' + 'Einstein.im')
-    # im.ft(model = 'model_images/' + '3C84' + '.modelimage.im')
-    im.close()
-    im.open(thems = ms_name, usescratch = True)
-    uvsub(vis = ms_name, reverse = True)
-    im.close()
-    print((time.time() - t_start)/60)
     
     
     
@@ -268,42 +247,11 @@ if create_noisy_ms == 'Yes':
         bandwidth_per_channel = qa.quantity(freq_setup[-2], 'MHz')
         integration_time_qa = qa.quantity(integration_time, 's')
         
-        
-        # print('Observation time: ', scan['observation_time'][0])
-                
-        
-        # if ('Ky' in scan['participating_stations'] or 
-        #     'Ku' in scan['participating_stations'] or
-        #     'Kt' in scan['participating_stations']):
-            
-        #     no_lcp_chs = freq_defs[2]['no_lcp_ch']
-        #     # print('Korean station is present in this scan')
-            
-        # else:
-        #     no_lcp_chs = freq_defs[0]['no_lcp_ch']
-            
-        
-        
-        # data_rate = (no_lcp_chs * bandwidth_per_channel['value'] 
-        #                 * npol * nbits * 2.0)
-        # print('Data rate: ', data_rate)
-        
-        # noise = ( ((1/eta_c) * SEFD_star) / 
-        #         np.sqrt(data_rate * scan['observation_time'][0] / 2))
-        # print('Noise per scan:', noise)
-        
-        
-        
-        # print(integration_time_qa['value'])
-        
-        
-        # sigma = noise * np.sqrt(nchannels * npol * nbase * 
-        #                         scan['observation_time'][0] / 
-        #                         integration_time_qa['value'])
-        
+        bandwidth_per_channel = qa.convert(bandwidth_per_channel, 'Hz')
+        print(bandwidth_per_channel)
         
         #Calculating simple noise for the scan
-        sigma_simple = ((1/eta_c) * SEFD_star * np.sqrt(2 * nbase) / 
+        sigma_simple = ((1/eta_c) * SEFD_star * np.sqrt(npol * nbase) / 
                         np.sqrt(integration_time_qa['value'] * 
                                 bandwidth_per_channel['value'] * nbits))
         print('Sigma per scan: ', sigma_simple)        
@@ -345,7 +293,41 @@ if create_noisy_ms == 'Yes':
     + ms_name + ".ms corrupted with thermal noise.")
 
 
+
+if corrupt_model_data == 'Yes':
+
+    # Corrupting model image with voltage pattern, copy it to data column of
+    # Measurement Set.
+    
+    t_start = time.time()
+    
+    for scan in scans[80:100]:
+    
+        print("Corrupting model data with voltage pattern which is estimated "
+              + "separately for each antenna in the array.")
+        
+        ms_name = 'scan_' + scan['scan_no'] + '.ms'
+        noisy_ms_name = ms_name[:-3] + '.noisy.ms'
+        
+        im.open(noisy_ms_name)
+        im.selectvis()
+        im.defineimage(nx = 512, ny = 512, cellx = pix_res, celly = pix_res, 
+                       facets = 2)
+        im.setvp(dovp = True, usedefaultvp = True)
+        im.setoptions(ftmachine = 'mosaic')
+        # im.ft(model = 'model_images/' + 'Einstein.im')
+        im.ft(model = 'model_images/' + scan['source_name'] + '.modelimage.im')
+        im.close()
+        im.open(thems = noisy_ms_name)
+        uvsub(vis = noisy_ms_name, reverse = True)
+        im.close()
+        
+    print((time.time() - t_start)/60)
+
+
+
 print('\n')
+
 
     
 if combine_measurment_sets == 'Yes':
@@ -371,11 +353,3 @@ print('corrupt_model_data: ', corrupt_model_data)
 print('create_noisy_ms: ', create_noisy_ms)
 
 
-# %%
-
-
-# import winsound
-
-# frequency = 2500  # Set Frequency To 2500 Hertz
-# duration = 1000  # Set Duration To 1000 ms == 1 second
-# winsound.Beep(frequency, duration)
