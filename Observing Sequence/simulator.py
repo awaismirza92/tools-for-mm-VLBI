@@ -1,7 +1,9 @@
 # This is a wrapper file for model-vlbi.
 
 #Importing libraries
-import os
+
+import glob
+from astropy.io.votable import parse
 
 #%%
 
@@ -36,8 +38,8 @@ combine_measurment_sets = 'Yes'
 
 perform_observation = 'No'
 create_input_models = 'No'
+create_noisy_ms = 'No'
 corrupt_model_data = 'No'
-# create_noisy_ms = 'No'
 combine_measurment_sets = 'No'
    
 if perform_observation == 'Yes':
@@ -198,8 +200,8 @@ if create_input_models == 'Yes':
 
 
 
-   
-
+current_files = glob.glob('*')   
+print(current_files)
     
     
     
@@ -215,7 +217,7 @@ if create_noisy_ms == 'Yes':
     # nbase = len(mylengths)                  # Number of baselines
     
     
-        
+       
     
     sigma_array = []
     for scan in scans[80:100]:
@@ -263,6 +265,12 @@ if create_noisy_ms == 'Yes':
         #Specifying name of noisy measurement set
         ms_name = 'scan_' + scan['scan_no'] + '.ms'
         noisy_ms_name = ms_name[:-3] + '.noisy.ms'   
+        
+        
+        #Deleting existing (if any) noisy measurement set
+        if noisy_ms_name in current_files:
+            os.system('rm -r ' + noisy_ms_name)
+            print('Removed: ', noisy_ms_name)
         
         
         #Creating a noisy measurement set
@@ -342,8 +350,30 @@ if combine_measurment_sets == 'Yes':
     print(noisy_ms_name_list)
     
     combined_ms_name = 'all_scans_combined.ms'
-    os.system('rm -r ' + combined_ms_name)
+    
+    #Deleting existing (if any) noisy measurement set
+    if noisy_ms_name in current_files:
+        os.system('rm -r ' + combined_ms_name)
+        print('Removed: ', combined_ms_name)
+    
     concat(vis = noisy_ms_name_list, concatvis = combined_ms_name)
+    
+#%%
+
+from astropy.io.votable import parse
+from urllib.request import urlopen
+
+import io
+
+
+query_url = 'https://almascience.eso.org/sc/flux?DATE=17-Aug-2021&FREQUENCY=91.5E+09&NAME=3C84'
+url_response = urlopen(query_url)
+io_bytes_object = io.BytesIO(url_response.read())
+vo_table = parse(io_bytes_object)
+firts_table = vo_table.get_first_table()
+print(firts_table.array['FluxDensity'][0])
+
+#%%
           
     
 print('\n')
