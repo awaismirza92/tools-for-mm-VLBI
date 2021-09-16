@@ -1,7 +1,7 @@
 # This is a wrapper file for model-vlbi.
 
 #Importing libraries
-
+import os, sys
 import glob
 from astropy.io.votable import parse
 
@@ -37,7 +37,7 @@ combine_measurment_sets = 'Yes'
 
 
 perform_observation = 'No'
-create_input_models = 'No'
+# create_input_models = 'No'
 create_noisy_ms = 'No'
 corrupt_model_data = 'No'
 combine_measurment_sets = 'No'
@@ -152,10 +152,33 @@ pix_res = '{}'.format(pix_res) + 'arcsec'
 
 # %%
 
-
+def flux_file_completion_check():
+    flux_sources = []
+    
+    with open('source_fluxes.txt', 'r') as flux_file:
+            lines_list = flux_file.readlines()
+            
+            for line in lines_list[1:]:
+                
+                line_parts = line.split(' ')
+                
+                flux_source = {'source_name' : line_parts[0]}
+                flux_source['date'] = line_parts[1]
+                flux_source['freq'] = line_parts[2]
+                flux_source['flux'] = line_parts[3]
+                
+                flux_sources.append(flux_source)
+                
+        if len(flux_sources) == 0:
+            print()
+        
+        for source_name, source_direction in sources.items():
+            
+            
+        
 
    
-if create_input_models == 'Yes':
+if create_input_models == 'Yes':      
 
 
     #Create model image for the sources

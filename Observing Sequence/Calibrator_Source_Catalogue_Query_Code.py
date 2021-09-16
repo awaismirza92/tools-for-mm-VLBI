@@ -1,3 +1,6 @@
+#!/usr/bin/python
+
+
 from datetime import datetime
 import io
 
@@ -57,10 +60,19 @@ with open(file_address + '.vex.difx', 'r') as vex_file:
 
 #%%
 
-file_object = open("calibrator_fluxes.txt", "w")
+file_object = open("source_fluxes.txt", "w")
 
-file_object.write('Source'.ljust(10) +  'Flux'.ljust(10) 
-                  + 'Date'.ljust(14) + 'Freq'.ljust(10) + '\n')
+file_object.write('Source'.ljust(14) +  
+                  'Date'.ljust(14) + 
+                  'Freq(Hz)'.ljust(14) + 
+                  'Flux(Jy)'.ljust(14) + 
+                  'FluxError(Jy)'.ljust(14) + 
+                  'SpectralIndex'.ljust(18) +  
+                  'SpectralIndexError'.ljust(22) + 
+                  'Warning'.ljust(10) +  
+                  'NearestMeasurementDate'.ljust(25) +  
+                  'FluxEstimatorVersion'.ljust(10) +  
+                  '\n')
 
 freq = '86E+09'
 for source_name in sources.keys():
@@ -70,13 +82,46 @@ for source_name in sources.keys():
     io_bytes_object = io.BytesIO(url_response.read())
     vo_table = parse(io_bytes_object)
     first_table = vo_table.get_first_table()
-    flux_density = first_table.array['FluxDensity'][0]
+    
+    flux_density = first_table.array['FluxDensity'][0].round(5)
+    flux_density_error = first_table.array['FluxDensityError'][0].round(5)
+    
+    spectral_index = first_table.array['SpectralIndex'][0].round(5)
+    spectral_index_error = first_table.array['SpectralIndexError'][0].round(5)
+    
+    data_conditions = first_table.array['DataConditions'][0]
+    near_measure_date = first_table.array['Nearest Measurement Date'][0]
+    
+    version = first_table.array['Version'][0]
+    
     print(source_name, flux_density)
     
     if flux_density != '--':
-        flux_density = round(flux_density, 2)
-        file_object.write(source_name.ljust(10) +  str(flux_density).ljust(10) 
-                          + start_date.ljust(14) + freq.ljust(10) + '\n')
+        file_object.write(source_name.ljust(14) +  
+                          start_date.ljust(14) + 
+                          freq.ljust(14) + 
+                          str(flux_density).ljust(14) + 
+                          str(flux_density_error).ljust(14) +
+                          str(spectral_index).ljust(18) + 
+                          str(spectral_index_error).ljust(22) +
+                          str(data_conditions).ljust(10) + 
+                          str(near_measure_date).ljust(25) + 
+                          str(version).ljust(10) + 
+                          '\n')
 
     
 file_object.close()
+
+
+#%%
+
+# import os, sys
+import model_vlbi_functions
+
+flux_file_existance_check(sources, start_date)
+
+
+# %%
+import sys
+        
+flux_file_completion_check(sources, start_date)

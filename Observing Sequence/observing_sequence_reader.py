@@ -2,7 +2,6 @@ from datetime import datetime
 import pylab as pl
 import time
 import numpy as np
-import os
 
 t_start = time.time()
 
