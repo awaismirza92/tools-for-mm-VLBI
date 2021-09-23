@@ -1,4 +1,3 @@
-#!/usr/bin/python
 
 
 from datetime import datetime
@@ -66,6 +65,7 @@ file_object.write('Source'.ljust(14) +
                   'Date'.ljust(14) + 
                   'Freq(Hz)'.ljust(14) + 
                   'Flux(Jy)'.ljust(14) + 
+                  'ModelShape'.ljust(14) + 
                   'FluxError(Jy)'.ljust(14) + 
                   'SpectralIndex'.ljust(18) +  
                   'SpectralIndexError'.ljust(22) + 
@@ -75,6 +75,7 @@ file_object.write('Source'.ljust(14) +
                   '\n')
 
 freq = '86E+09'
+
 for source_name in sources.keys():
     
     query_url = f'https://almascience.eso.org/sc/flux?DATE={start_date}&FREQUENCY={freq}&NAME={source_name}'
@@ -94,13 +95,14 @@ for source_name in sources.keys():
     
     version = first_table.array['Version'][0]
     
-    print(source_name, flux_density)
+    print(source_name.ljust(14), str(flux_density).ljust(14))
     
     if flux_density != '--':
         file_object.write(source_name.ljust(14) +  
                           start_date.ljust(14) + 
                           freq.ljust(14) + 
                           str(flux_density).ljust(14) + 
+                          'point'.ljust(14) + 
                           str(flux_density_error).ljust(14) +
                           str(spectral_index).ljust(18) + 
                           str(spectral_index_error).ljust(22) +
@@ -108,20 +110,19 @@ for source_name in sources.keys():
                           str(near_measure_date).ljust(25) + 
                           str(version).ljust(10) + 
                           '\n')
+    else:
+        file_object.write(source_name.ljust(14) +  
+                          start_date.ljust(14) + 
+                          freq.ljust(14) + 
+                          str(flux_density).ljust(14) + 
+                          'point'.ljust(14) +
+                          '\n')
 
     
 file_object.close()
 
 
-#%%
+print("\nThe retrived data as been saved in the file 'source_fluxes.txt'. " +
+      "Please note that the symbol '--' means that the flux of " +
+      "corresponding source has not been found at Calibrator Source Catalogue.")
 
-# import os, sys
-import model_vlbi_functions
-
-flux_file_existance_check(sources, start_date)
-
-
-# %%
-import sys
-        
-flux_file_completion_check(sources, start_date)

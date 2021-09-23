@@ -4,6 +4,7 @@ import time
 import numpy as np
 
 t_start = time.time()
+print(t_start)
 
 #%%
 from simutil import simutil
@@ -318,8 +319,10 @@ with open(file_address + '.vex.obs', 'r') as vex_file:
 
             start_time = line_parts[1][:-7]
             start_time = datetime.strptime(start_time, '%Yy%jd%Hh%Mm%S')
-            start_time = start_time.strftime('%Y/%m/%d/%H:%M:%S')
             
+            start_date = start_time.strftime('%d-%b-%Y')
+            
+            start_time = start_time.strftime('%Y/%m/%d/%H:%M:%S')            
             scan['start_time'] = start_time
             # scan.append(start_time)
             
