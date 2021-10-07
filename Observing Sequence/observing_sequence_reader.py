@@ -4,16 +4,15 @@ import time
 import numpy as np
 
 t_start = time.time()
-print(t_start)
 
 #%%
 from simutil import simutil
 u = simutil()
 
 
-
 #%%
 #Specifying values of SEFD & diameter
+print('Specifying SEFDs, diameters & abreviations for stations. ')
 
 SEFD_dic_name = {'EFLSBERG' : 1000,
             'EB_RDBE' : 1000,   
@@ -58,8 +57,6 @@ SEFD_dic = {'Eb' : 1000,
             'Lm' : 1714,
             'PB' : 818}
 
-
-# print(type(SEFD_dic.values()))
 
 dia_dic = {'EFLSBERG' : 80,
             'EB_RDBE' : 80,       
@@ -127,12 +124,15 @@ station_abbrev_dic = {'Ef' : 'EFLSBERG',
             'Lm' : 'LMT' ,             #
             'PB': 'PdBure'}          #
 
+print('Done. \n')
+
 # %%
 # reading stations
+print('Reading names, codes, adjusted coordinates of stations.')
 
 station = ['Station', 'Code', 'MJD0', 'Adjusted positions [X]', 
            'Adjusted positions [Y]', 'Adjusted positions [Z]']
-print(station)
+
 
 x_adj_dic = {}
 y_adj_dic = {}
@@ -146,12 +146,10 @@ with open(file_address + '.sum', 'r') as sum_file:
     for line in lines_list:
         line_counter += 1
         if line[0:24] == '   Plate tectonic motion':
-            # print(line)
             table_start_line_number = line_counter + 2
 
         if line[0:16] == 'BASELINE LENGTHS':
-            # print(line)
-            table_end_line_number = line_counter - 4 
+            table_end_line_number = line_counter - 4
 
     for line in lines_list[table_start_line_number:table_end_line_number]:
         station_name = line[3:12].rstrip()
@@ -165,24 +163,19 @@ with open(file_address + '.sum', 'r') as sum_file:
         station.append(MJDO)
         
         x_adj_dic[station_code] = float(line[49:61].lstrip())
-        # x_adj.append(float(line[49:61].lstrip()))
         station.append(line[49:61].lstrip())
         
         y_adj_dic[station_code] = float(line[62:74].lstrip())
-        # y_adj.append(float(line[62:74].lstrip()))
         station.append(line[62:74].lstrip())
         
         z_adj_dic[station_code] = float(line[76:-1])
-        # z_adj.append(float(line[76:-1]))
         station.append(line[76:-1])
-        
-        print(station)
-        
-print(x_adj_dic)
-print(type(x_adj_dic.values()))
-print(x_adj_dic.values())        
+
+print('Done. \n')
+
 
 # %%        
+print('Extracting SEFDs & diameters of participating stations.')
 
 SEFD = []
 dia = []
@@ -191,11 +184,10 @@ for name in station_names:
     SEFD.append(SEFD_dic_name[name])
     dia.append(dia_dic[name])
 
-print(station_names)
-print(dia) 
-print(SEFD)     
+print('Done. \n')
 
 #%%
+print('Calculating reference position of the antenna configuration.')
 #Calculating reference position of the antenna configuration
 
 cofa_x = pl.average(x_adj_dic.values())
@@ -204,39 +196,8 @@ cofa_z = pl.average(x_adj_dic.values())
 cofa_lat,cofa_lon,cofa_alt = u.xyz2long(cofa_x, cofa_y, cofa_z, 'WGS84')
 pos_obs = me.position("WGS84",qa.quantity(cofa_lon, "rad"), qa.quantity(cofa_lat, "rad"), qa.quantity(cofa_alt, "m"))
 
+print('Done. \n')
 
-
-
-# %%
-# reading SEFD
-
-# SEFD = []
-# station_name = []
-# dia = []
-# with open(file_address[:-5] + 'gmva.cfg', 'r') as gmva_cfg_file:
-#     for line in gmva_cfg_file.readlines():
-#         line_parts=line.split()
-        
-#         if (line.startswith('#') == False):
-#             station_name.append(line_parts[4])
-#             SEFD.append(float(line_parts[5]))
-#             dia.append(float(line_parts[3]))
-
-# print(station_name)
-# print(SEFD)
-# print(dia)
-
-
-
-#%%
-
-# for i, station_i in enumerate(stations_list):
-#     for j, station_j in enumerate(station_name):
-#         if (station_i[0] == station_j.upper()):
-#             stations_list[i].insert(1, SEFD[j])
-
-# for station in stations_list:
-#     print(station)
 
 
 #%%
@@ -248,16 +209,13 @@ with open(file_address + '.vex.obs', 'r') as vex_file:
 
         if 'exper_name' in line:
             project_name = line.split('= ')[1][:-2]
-            print(project_name)
- 
+
         if 'integr_time' in line:
-            # print(line)
             integration_time = line.split(':')[1].lstrip().rstrip()
-            print(integration_time)
-        
+
 # %%
 # reading targets
-
+print('Reading science targets. ')
 sources = {}
 
 with open(file_address + '.vex.obs', 'r') as vex_file:
@@ -265,16 +223,12 @@ with open(file_address + '.vex.obs', 'r') as vex_file:
     for line in vex_file.readlines():
  
         if 'source_name' in line:
-            # print(line)
             source_name = line.split('= ')[1][:-2]
             direction = [source_name]
-            # source = {'name': line.split('= ')[1][:-2]}
-            # print(direction)
 
         if '*' not in line and 'ra =' in line:
-            # print(line)
             coord_parts = line.split('= ')
-            
+
             epoch = coord_parts[-1][:-2]
             direction.append(epoch)
             
@@ -284,16 +238,14 @@ with open(file_address + '.vex.obs', 'r') as vex_file:
             Dec = coord_parts[2][:-18].replace("'", 'm').replace('"', 's')
             direction.append(Dec)
             
-            print(direction)
-            print('\n')
-            
             sources[source_name] = [epoch, RA, Dec]
             
-            # sources.append(source)
+print('Done. \n')
 
 
 # %%
 # reading scans
+print('Reading all scans of the observing session. ')
 
 scan_stations_abbrev = []
 scan_stations_obs_time = []
@@ -306,15 +258,12 @@ with open(file_address + '.vex.obs', 'r') as vex_file:
         if 'scan No' in line:
             scan_no = line[7:11]
             scan = {'scan_no' : scan_no}
-            # scan = [scan_no]
-                        
+
         if 'REFERENCE_POINTING_DETERMINE' in line:
             intent = 'REFERENCE_POINTING_DETERMINE'
             scan['intent'] = intent
-            # scan.append(intent)
-            
-        if 'start=' in line and 'exper_nominal' not in line:
 
+        if 'start=' in line and 'exper_nominal' not in line:
             line_parts = line.split('=')
 
             start_time = line_parts[1][:-7]
@@ -324,29 +273,22 @@ with open(file_address + '.vex.obs', 'r') as vex_file:
             
             start_time = start_time.strftime('%Y/%m/%d/%H:%M:%S')            
             scan['start_time'] = start_time
-            # scan.append(start_time)
-            
 
             mode = line_parts[2][:8]
             if ';' in mode:
                 mode = mode[:-1]
             scan['mode'] = mode
-            # scan.append(mode)
 
             source_name = line_parts[3][:-2]
             scan['source_name'] = source_name
-            # scan.append(source_name)
 
         if 'station=' in line and 'sec' in line:
-
             line_parts = line.split('=')
 
             station_abbrev = line_parts[1][:2]
             scan_stations_abbrev.append(station_abbrev)
 
             line_parts = line.split(':')
-
-            # print(line_parts)
 
             obs_time = int(line_parts[2][2:-4])
             scan_stations_obs_time.append(obs_time)
@@ -357,28 +299,16 @@ with open(file_address + '.vex.obs', 'r') as vex_file:
             scan['observation_time'] = scan_stations_obs_time
             
             if 'REFERENCE_POINTING_DETERMINE' not in scan.values():
-                print('\n')
-                print(scan)
-                
                 scans.append(scan)
                 
             scan_stations_abbrev = []
             scan_stations_obs_time = []
 
-            # break
+print('Done. \n')
 
-# %%
-
-print(len(scans))
-
-count = 0
-for scan in scans:
-    if scan['mode'] == '3mm_RDBE':
-        count += 1
-
-print(count)
 # %%
 # reading modes
+print('Reading scanning modes.')
 
 mode_freq = []
 freq_n_channels = []
@@ -416,7 +346,6 @@ with open(file_address + '.vex.difx', 'r') as vex_file:
                 n_channels = int(n_channels[:-1])
             freq_n_channels.append(int(n_channels))
             
-            
             line_parts_colon = line.split(':')
             
             band_width = line_parts_colon[0][-5:]
@@ -438,19 +367,19 @@ with open(file_address + '.vex.difx', 'r') as vex_file:
             mode['freq'] = mode_freq
             mode['n_channels'] = freq_n_channels
             mode['freq_resolution'] = freq_bandwidth
-            # mode['stations'] = freq_stations
-            
+
             modes.append(mode)
-            print('\n')
-            print(mode)
-            
+
             mode_freq = []
             freq_n_channels = []
             freq_bandwidth = []
             freq_stations = []
 
+print('Done. \n')
+
 # %%
 # reading frequency setup
+print('Reading frequency setups.')
 
 freq_defs = []
 
@@ -508,8 +437,6 @@ with open(file_address + '.vex.difx', 'r') as vex_file:
 
         if 'enddef' in line and 'chan_def' in vex_file_lines[i - 1]:
 
-            # print(freq_setup)
-            
             freq_def['ch_nos'] = ch_nos
             freq_def['cent_freqs'] = cent_freqs
             freq_def['side_bands'] = side_bands
@@ -520,24 +447,16 @@ with open(file_address + '.vex.difx', 'r') as vex_file:
             freq_def['no_lcp_ch'] = freq_def['pols'].count('Lcp') 
             freq_def['no_rcp_ch'] = freq_def['pols'].count('Rcp')
             
-            # print(freq_def)       
-            
-            for item in freq_def.items():
-                print(item)
-            
-            print('\n')
-            print('Channels with Lcp: ', freq_def['no_lcp_ch'])
-            print('Channels with Rcp: ', freq_def['no_rcp_ch'])
-            
-            
-            print('\n\n')
-            
+            # for item in freq_def.items():
+            #     print(item)
             
             freq_defs.append(freq_def)
             
+print('Done. \n')
 
 #%%
 #reading number of channels
+print('Reading number of channels.')
 
 with open(file_address + '.vex.difx', 'r') as vex_file:
 
@@ -545,7 +464,7 @@ with open(file_address + '.vex.difx', 'r') as vex_file:
 
         if 'number_channels' in line:
             nchannels = int(line.split(':')[1])
-            print('nchannels: ', nchannels)
+            # print('nchannels: ', nchannels)
 
 
 #Number of polarizations has been hard coded to be equal to 2. If this parameter
@@ -555,4 +474,4 @@ with open(file_address + '.vex.difx', 'r') as vex_file:
 npol = 2.0 
             # print('npol', npol)
  
-
+print('Done. \n')
