@@ -1,5 +1,3 @@
-
-
 from datetime import datetime
 import io
 
@@ -8,12 +6,7 @@ from astropy.io.votable import parse
 from urllib.request import urlopen
 
 
-
-
-
 file_address = 'input_files/c171a'
-
-
 
 sources = {}
 start_date = 'undefined'
@@ -25,7 +18,6 @@ with open(file_address + '.vex.difx', 'r') as vex_file:
         if 'source_name' in line:
             source_name = line.split('= ')[1][:-2]
             direction = [source_name]
-
 
         if '*' not in line and 'ra =' in line:
             coord_parts = line.split('= ')
@@ -55,17 +47,14 @@ with open(file_address + '.vex.difx', 'r') as vex_file:
             print(start_date)
             print('\n')
 
-            
-
 #%%
-
 file_object = open("source_fluxes.txt", "w")
 
 file_object.write('Source'.ljust(14) +  
                   'Date'.ljust(14) + 
-                  'Freq(Hz)'.ljust(14) + 
-                  'Flux(Jy)'.ljust(14) + 
-                  'ModelShape'.ljust(14) + 
+                  'Freq(Hz)'.ljust(14) +
+                  'ModelShape'.ljust(14) +
+                  'Flux(Jy)'.ljust(14) +
                   'FluxError(Jy)'.ljust(14) + 
                   'SpectralIndex'.ljust(18) +  
                   'SpectralIndexError'.ljust(22) + 
@@ -100,9 +89,9 @@ for source_name in sources.keys():
     if flux_density != '--':
         file_object.write(source_name.ljust(14) +  
                           start_date.ljust(14) + 
-                          freq.ljust(14) + 
-                          str(flux_density).ljust(14) + 
-                          'point'.ljust(14) + 
+                          freq.ljust(14) +
+                          'point'.ljust(14) +
+                          str(flux_density).ljust(14) +
                           str(flux_density_error).ljust(14) +
                           str(spectral_index).ljust(18) + 
                           str(spectral_index_error).ljust(22) +
@@ -113,16 +102,15 @@ for source_name in sources.keys():
     else:
         file_object.write(source_name.ljust(14) +  
                           start_date.ljust(14) + 
-                          freq.ljust(14) + 
-                          str(flux_density).ljust(14) + 
+                          freq.ljust(14) +
                           'point'.ljust(14) +
+                          str(flux_density).ljust(14) +
                           '\n')
 
     
 file_object.close()
 
 
-print("\nThe retrived data as been saved in the file 'source_fluxes.txt'. " +
+print("\nThe retrieved data as been saved in the file 'source_fluxes.txt'. " +
       "Please note that the symbol '--' means that the flux of " +
       "corresponding source has not been found at Calibrator Source Catalogue.")
-
