@@ -186,24 +186,12 @@ for name in station_names:
 
 print('Done. \n')
 
-#%%
-print('Calculating reference position of the antenna configuration.')
-#Calculating reference position of the antenna configuration
-
-cofa_x = pl.average(x_adj_dic.values())
-cofa_y = pl.average(x_adj_dic.values())
-cofa_z = pl.average(x_adj_dic.values())
-cofa_lat,cofa_lon,cofa_alt = u.xyz2long(cofa_x, cofa_y, cofa_z, 'WGS84')
-pos_obs = me.position("WGS84",qa.quantity(cofa_lon, "rad"), qa.quantity(cofa_lat, "rad"), qa.quantity(cofa_alt, "m"))
-
-print('Done. \n')
-
 
 
 #%%
 #reading project name and integration time
 
-with open(file_address + '.vex.obs', 'r') as vex_file:
+with open(file_address + '.vex.difx', 'r') as vex_file:
 
     for line in vex_file.readlines():
 
@@ -218,7 +206,7 @@ with open(file_address + '.vex.obs', 'r') as vex_file:
 print('Reading science targets. ')
 sources = {}
 
-with open(file_address + '.vex.obs', 'r') as vex_file:
+with open(file_address + '.vex.difx', 'r') as vex_file:
 
     for line in vex_file.readlines():
  
@@ -251,7 +239,7 @@ scan_stations_abbrev = []
 scan_stations_obs_time = []
 scans = []
 
-with open(file_address + '.vex.obs', 'r') as vex_file:
+with open(file_address + '.vex.difx', 'r') as vex_file:
 
     for line in vex_file.readlines():
 
@@ -286,6 +274,10 @@ with open(file_address + '.vex.obs', 'r') as vex_file:
             line_parts = line.split('=')
 
             station_abbrev = line_parts[1][:2]
+            if station_abbrev == 'Pv':
+                station_abbrev = 'PV'
+            if station_abbrev == 'Ef':
+                station_abbrev = 'Eb'
             scan_stations_abbrev.append(station_abbrev)
 
             line_parts = line.split(':')
