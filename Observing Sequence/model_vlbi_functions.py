@@ -6,11 +6,108 @@ import sys
 import numpy as np
 
 
-def perform_observation(scans, dia, station_names, pos_obs, modes, sources, integration_time):
+
+def vlbi_vp(scans, modes, station_abbrev_dic, dia_dic,
+            start_scan, end_scan,
+               blockage_diam='0.75m',
+               max_rad='1.000deg'):
+    """ Function to compute and save the voltage pattern of a heterogeneous
+    array of telescopes. Currently, only an airy disk voltage pattern can be
+    computed with this function. simvlbi implements the table computed with this
+    function to corrupt the visibilities. This function uses the
+    vpmanager.setpbairy() tool in CASA.
+
+    Parameters
+    -----------
+    configfile: str
+            Configuration file containing coordinates (in Earth-centred
+            left-handed coordinates) and diameter and SEFD of the telescopes in
+            the array configuration. Eg: '<path-to-file>/<filename>.confg'.
+    array: {'EHT', 'GMVA', other}
+            Array of telescopes which is used for simulating the data. If using
+            the expert mode with a different configuration of telescopes than
+            'EHT' or 'GMVA', please specify your own array name and not 'EHT'
+            or 'GMVA'.
+    ref_freq: str
+            Central frequency in GHz of spectral window of observation.
+            Default: '230.609 GHz' for EHT and '86.0 GHz' for GMVA.
+    projectname: str
+            Name of the project with .ms file extension. The function computes
+            voltage patterns for each telescope in the configuration file and
+            saves them into a CASA table with the name '<projectname>_vp.tab'.
+            Eg: 'simulation_<arrayname>.ms'
+    blockage_diam: str, optional
+            The effective diameter (in meters) of subreflector blockage that is
+            used to compute the airy disk voltage pattern. '0.75 m' is the
+            default value considered.
+    max_rad: str, optional
+            Maximum radial extent of the voltage pattern/primary beam (scales
+            as 1/frequency) in degrees. This parameter is specified in the format
+            '1.0 deg' for a 1 degree maximum radial extent. Default: '1.0 deg'.
+    """
+
+    # Read in the configuration file to obtain diameters of the antennae
+
+    print('Creating voltage patterns for each scan configuration.')
+
+    os.system('mkdir -p vp_tables')
+
+    for scan in scans[start_scan:end_scan]:
+
+        print(scan['scan_no'])
+
+        os.system('rm -rf ' + 'vp_tables/scan_' + scan['scan_no'] + '_vp.tab')
+
+        # Clear any voltage patterns previously determined in terminal.
+        vp.reset()
+
+        array = 'GMVA'
+
+        # Create Voltage patterns for each telescope.
+        # print("Computing voltage patterns..")
+        for station_abbrev in scan['participating_stations']:
+            station_name = station_abbrev_dic[station_abbrev]
+            station_dia = dia_dic[station_name]
+            vp.setpbairy(telescope=array, dishdiam=station_dia,
+                         blockagediam=blockage_diam, maxrad=max_rad,
+                         reffreq=modes[0]['freq'][0], dopb=True)
+
+        # Save the estimated voltage patterns in a CASA table which will be accessed
+        # to corrupt simulated data with primary beams
+        # print("Voltage pattern is saved in a CASA table under the name "
+        #       + projectname + "_vp.tab and is used to corrupt the visibilities.")
+        vp.saveastable('vp_tables/scan_' + scan['scan_no'] + '_vp.tab')
+
+    print('Done. \n')
+
+
+
+
+
+#%%
+def calculate_ref_position(x_part_stations, y_part_stations, z_part_stations):
+
+    # print('Calculating reference position of the antenna configuration.')
+    #Calculating reference position of the antenna configuration
+
+    cofa_x = pl.average(x_part_stations)
+    cofa_y = pl.average(y_part_stations)
+    cofa_z = pl.average(z_part_stations)
+    cofa_lat,cofa_lon,cofa_alt = u.xyz2long(cofa_x, cofa_y, cofa_z, 'WGS84')
+    pos_obs = me.position("WGS84",qa.quantity(cofa_lon, "rad"), qa.quantity(cofa_lat, "rad"), qa.quantity(cofa_alt, "m"))
+
+    # print('Done. \n')
+
+    return pos_obs
+
+
+
+def perform_observation(scans, dia, station_names, modes, sources,
+                        integration_time, start_scan, end_scan):
 
     print('Perfoming observation for each scan with sm.observe. Scan number mentioned below.')
 
-    for scan in scans[80:100]:
+    for scan in scans[start_scan:end_scan]:
         # Creating new MS.
         ms_name = 'scan_' + scan['scan_no'] + '.ms'
         os.system('rm -rf ' + ms_name)
@@ -19,17 +116,34 @@ def perform_observation(scans, dia, station_names, pos_obs, modes, sources, inte
         vp.setpbantresptable(telescope=array, dopb=True,
                              antresppath='vp_tables/scan_' + scan['scan_no'] + '_vp.tab')
 
+
+        x_part_stations = []
+        y_part_stations = []
+        z_part_stations = []
+        dia_part_stations = []
+        names_part_stations = []
+        for station_abbrev in scan['participating_stations']:
+            station_name = station_abbrev_dic[station_abbrev]
+            x_part_stations.append(x_adj_dic[station_abbrev])
+            y_part_stations.append(y_adj_dic[station_abbrev])
+            z_part_stations.append(z_adj_dic[station_abbrev])
+            dia_part_stations.append(dia_dic[station_name])
+            names_part_stations.append(station_abbrev_dic[station_abbrev])
+
+        scan_pos_obs = calculate_ref_position(x_part_stations, y_part_stations,
+                                              z_part_stations)
+
         # Specifying the array configuration
         sm.setconfig(
             telescopename=array,
-            x=x_adj_dic.values(),
-            y=y_adj_dic.values(),
-            z=z_adj_dic.values(),
-            dishdiameter=dia,
+            x=x_part_stations,
+            y=y_part_stations,
+            z=z_part_stations,
+            dishdiameter=dia_part_stations,
             mount='alt-az',
-            antname=station_names,
+            antname=names_part_stations,
             coordsystem='global',
-            referencelocation=pos_obs)
+            referencelocation=scan_pos_obs)
 
         # Specifying spectral windows
         sm.setspwindow(
@@ -205,6 +319,8 @@ def flux_file_completion_check(sources, source_fluxes_address):
         return flux_sources
 
 
+
+
 def create_input_models(sources, pix_res, modes, flux_sources):
 
     print('Creating models of sources.')
@@ -260,7 +376,11 @@ def create_input_models(sources, pix_res, modes, flux_sources):
 
     print('Done. \n')
 
-def create_noisy_ms(scans, freq_setup, integration_time, npol, flux_sources):
+
+
+
+def create_noisy_ms(scans, freq_setup, integration_time, npol, flux_sources,
+                    start_scan, end_scan):
     # print("Visibilities added to Data column of MS. Now corrupting visibilities "
     #       + "with previously computed rms noise. New noisy MS will be created.")
 
@@ -271,7 +391,7 @@ def create_noisy_ms(scans, freq_setup, integration_time, npol, flux_sources):
     # nbase = len(mylengths)                  # Number of baselines
 
     sigma_array = []
-    for scan in scans[80:100]:
+    for scan in scans[start_scan:end_scan]:
 
         print('\n')
         print(scan['scan_no'])
@@ -334,12 +454,14 @@ def create_noisy_ms(scans, freq_setup, integration_time, npol, flux_sources):
         os.system('cp -r ' + ms_name + ' ' + noisy_ms_name)
         sm.openfromms(noisy_ms_name)
         sm.setnoise(mode='simplenoise', simplenoise=sigma_simple)
-        sm.corrupt()
-
+        scan_vptable = 'vp_tables/scan_' + scan['scan_no'] + '_vp.tab'
+        sm.setvp(dovp=True, usedefaultvp=False, vptable=scan_vptable)
         # To invoke uv-domain primary beam convolution for heterogeneous arrays we
         # set the fourier transform machine to mosaic.
 
         sm.setoptions(ftmachine="mosaic")
+        sm.corrupt()
+
         sm.done()
         sm.close()
 
@@ -350,86 +472,16 @@ def create_noisy_ms(scans, freq_setup, integration_time, npol, flux_sources):
     #       + ms_name + ".ms corrupted with thermal noise.")
 
 
-def vlbi_vp(scans, modes, station_abbrev_dic, dia_dic,
-               blockage_diam='0.75m',
-               max_rad='1.000deg'):
-    """ Function to compute and save the voltage pattern of a heterogeneous
-    array of telescopes. Currently, only an airy disk voltage pattern can be
-    computed with this function. simvlbi implements the table computed with this
-    function to corrupt the visibilities. This function uses the
-    vpmanager.setpbairy() tool in CASA.
-
-    Parameters
-    -----------
-    configfile: str
-            Configuration file containing coordinates (in Earth-centred
-            left-handed coordinates) and diameter and SEFD of the telescopes in
-            the array configuration. Eg: '<path-to-file>/<filename>.confg'.
-    array: {'EHT', 'GMVA', other}
-            Array of telescopes which is used for simulating the data. If using
-            the expert mode with a different configuration of telescopes than
-            'EHT' or 'GMVA', please specify your own array name and not 'EHT'
-            or 'GMVA'.
-    ref_freq: str
-            Central frequency in GHz of spectral window of observation.
-            Default: '230.609 GHz' for EHT and '86.0 GHz' for GMVA.
-    projectname: str
-            Name of the project with .ms file extension. The function computes
-            voltage patterns for each telescope in the configuration file and
-            saves them into a CASA table with the name '<projectname>_vp.tab'.
-            Eg: 'simulation_<arrayname>.ms'
-    blockage_diam: str, optional
-            The effective diameter (in meters) of subreflector blockage that is
-            used to compute the airy disk voltage pattern. '0.75 m' is the
-            default value considered.
-    max_rad: str, optional
-            Maximum radial extent of the voltage pattern/primary beam (scales
-            as 1/frequency) in degrees. This parameter is specified in the format
-            '1.0 deg' for a 1 degree maximum radial extent. Default: '1.0 deg'.
-    """
-
-    # Read in the configuration file to obtain diameters of the antennae
-
-    print('Creating voltage patterns for each scan configuration.')
-
-    os.system('mkdir -p vp_tables')
-
-    for scan in scans[80:100]:
-
-        print(scan['scan_no'])
-
-        os.system('rm -rf ' + 'vp_tables/scan_' + scan['scan_no'] + '_vp.tab')
-
-        # Clear any voltage patterns previously determined in terminal.
-        vp.reset()
-
-        array = 'GMVA'
-
-        # Create Voltage patterns for each telescope.
-        # print("Computing voltage patterns..")
-        for station_abbrev in scan['participating_stations']:
-            station_name = station_abbrev_dic[station_abbrev]
-            station_dia = dia_dic[station_name]
-            vp.setpbairy(telescope=array, dishdiam=station_dia,
-                         blockagediam=blockage_diam, maxrad=max_rad,
-                         reffreq=modes[0]['freq'][0], dopb=True)
-
-        # Save the estimated voltage patterns in a CASA table which will be accessed
-        # to corrupt simulated data with primary beams
-        # print("Voltage pattern is saved in a CASA table under the name "
-        #       + projectname + "_vp.tab and is used to corrupt the visibilities.")
-        vp.saveastable('vp_tables/scan_' + scan['scan_no'] + '_vp.tab')
-
-    print('Done. \n')
 
 
-def corrupt_model_data(scans, pix_res):
+
+def corrupt_model_data(scans, pix_res, start_scan, end_scan):
     # Corrupting model image with voltage pattern, copy it to data column of
     # Measurement Set.
 
     print('Adding model data into noisy measurment sets.')
 
-    for scan in scans[80:100]:
+    for scan in scans[start_scan:end_scan]:
         # print("Corrupting model data with voltage pattern which is estimated "
         #       + "separately for each antenna in the array.")
 
@@ -445,24 +497,23 @@ def corrupt_model_data(scans, pix_res):
         im.selectvis()
         im.defineimage(nx=512, ny=512, cellx=pix_res, celly=pix_res,
                        facets=1)
-        scan_vptable = 'vp_tables/scan_' + scan['scan_no'] + '_vp.tab'
-        im.setvp(dovp=True, usedefaultvp=False, vptable=scan_vptable)
         im.setoptions(ftmachine='mosaic')
         im.ft(model='model_images/' + scan['source_name'] + '.modelimage.im', incremental=False)
         im.close()
         im.open(thems=noisy_ms_name)
         uvsub(vis=noisy_ms_name, reverse=True)
+        # uvsub(vis=noisy_ms_name)
         im.close()
 
     print('Done. \n')
 
-def combine_measurement_sets(scans):
+def combine_measurement_sets(scans, start_scan, end_scan):
 
     print("Combining individual scan noisy measurment sets into a single " +
           " measurment set named 'all_scans_combined.ms'.")
 
     noisy_ms_name_list = []
-    for scan in scans[80:100]:
+    for scan in scans[start_scan:end_scan]:
         ms_name = 'scan_' + scan['scan_no'] + '.ms'
         noisy_ms_name = ms_name[:-3] + '.noisy.ms'
 
@@ -474,7 +525,7 @@ def combine_measurement_sets(scans):
     current_files = glob.glob('*')
 
     # Deleting existing (if any) noisy measurement set
-    if noisy_ms_name in current_files:
+    if combined_ms_name in current_files:
         os.system('rm -r ' + combined_ms_name)
         print('Removed previously present: ' + combined_ms_name)
 
