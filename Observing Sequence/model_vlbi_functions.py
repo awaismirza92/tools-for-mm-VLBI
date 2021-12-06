@@ -96,19 +96,23 @@ def calculate_ref_position(x_part_stations, y_part_stations, z_part_stations):
     cofa_lat,cofa_lon,cofa_alt = u.xyz2long(cofa_x, cofa_y, cofa_z, 'WGS84')
     pos_obs = me.position("WGS84",qa.quantity(cofa_lon, "rad"), qa.quantity(cofa_lat, "rad"), qa.quantity(cofa_alt, "m"))
 
-    # print('Done. \n')
+    print(pos_obs)
+    print('\n')
 
     return pos_obs
 
 
 
-def perform_observation(scans, dia, station_names, modes, sources,
+def perform_observation(scans, station_names, modes, sources,
                         integration_time, start_scan, end_scan):
 
     print('Perfoming observation for each scan with sm.observe. Scan number mentioned below.')
 
     for scan in scans[start_scan:end_scan]:
         # Creating new MS.
+
+        print(scan['scan_no'])
+
         ms_name = 'scan_' + scan['scan_no'] + '.ms'
         os.system('rm -rf ' + ms_name)
         sm.open(ms_name)
@@ -143,7 +147,8 @@ def perform_observation(scans, dia, station_names, modes, sources,
             mount='alt-az',
             antname=names_part_stations,
             coordsystem='global',
-            referencelocation=scan_pos_obs)
+            # referencelocation=me.observatory('ALMA'))
+            referencelocation = scan_pos_obs)
 
         # Specifying spectral windows
         sm.setspwindow(
@@ -156,6 +161,7 @@ def perform_observation(scans, dia, station_names, modes, sources,
 
         # Setting limits to flag data such as shadowing or when source is below
         # certain elevation
+        elev_limit = 0
         elev_limit = 10.0
         sm.setlimits(shadowlimit=0.001, elevationlimit=str(elev_limit) + 'deg')
 
@@ -163,7 +169,7 @@ def perform_observation(scans, dia, station_names, modes, sources,
         sm.setfeed('perfect R L')
         sm.setauto(autocorrwt=0.0)
 
-        print(scan['scan_no'])
+
 
         # Specifing the field to be observed
         sm.setfield(sourcename=scan['source_name'],
@@ -190,14 +196,14 @@ def compute_beam_max_and_pix_res(x_adj_dic, y_adj_dic, z_adj_dic, modes):
     # COFA (latitude, longitude) on the WGS84 reference ellipsoid, with z
     # normal to the ellipsoid and y pointing north.
 
-    print('Compting maximum baseline and pixel resolution.')
+    # print('Computing maximum baseline and pixel resolution.')
 
-    cx = np.mean(x_adj_dic.values())
-    cy = np.mean(y_adj_dic.values())
-    cz = np.mean(z_adj_dic.values())
+    cx = np.mean(x_adj_dic)
+    cy = np.mean(y_adj_dic)
+    cz = np.mean(z_adj_dic)
     n_antennas = len(x_adj_dic)
-    lat, lon, el = u.itrf2loc(x_adj_dic.values(), y_adj_dic.values(),
-                              z_adj_dic.values(), cx, cy, cz)
+    lat, lon, el = u.itrf2loc(x_adj_dic, y_adj_dic,
+                              z_adj_dic, cx, cy, cz)
     mylengths = np.zeros(n_antennas * (n_antennas - 1) / 2)
     k = 0
     for i in range(n_antennas):
@@ -328,10 +334,14 @@ def create_input_models(sources, pix_res, modes, flux_sources):
     os.system('mkdir -p model_images')
 
     # Create model image for the sources
-    for source_name, source_direction in sources.items():
+    for scan in scans[start_scan:end_scan]:
+    # for source_name, source_direction in sources.items():
+
+
 
         print("Creating the model image with the filename: {} ."
-              .format(source_name + '.modelimage.im'))
+              .format(scan['source_name'] + '.modelimage.im for scan ' +
+                      scan['scan_no']))
 
         cl.done()
 
@@ -342,18 +352,40 @@ def create_input_models(sources, pix_res, modes, flux_sources):
         # Gaussian, disk, or limbdarkeneddisk
 
         for flux_source in flux_sources:
-            if flux_source['source_name'] == source_name:
+            if flux_source['source_name'] == scan['source_name']:
                 flux = flux_source['flux']
                 input_model = flux_source['ModelShape']
+
+        source_direction = sources[scan['source_name']]
 
         cl.addcomponent(dir=source_direction, flux=flux, fluxunit='Jy',
                         freq=modes[0]['freq'][0], shape=input_model)
 
-        ia.fromshape(outfile='model_images/' + source_name + '.modelimage.im',
-                     shape=[512, 512, 1, 1],
+        ia.fromshape(outfile=('model_images/' + scan['scan_no'] + '_' +
+                              scan['source_name'] + '.modelimage.im'),
+                     shape=[1024, 1024, 1, 1],
                      overwrite=True)
         cs = ia.coordsys()
         cs.setunits(['rad', 'rad', '', 'Hz'])
+
+        x_part_stations = []
+        y_part_stations = []
+        z_part_stations = []
+        dia_part_stations = []
+        names_part_stations = []
+        for station_abbrev in scan['participating_stations']:
+            station_name = station_abbrev_dic[station_abbrev]
+            x_part_stations.append(x_adj_dic[station_abbrev])
+            y_part_stations.append(y_adj_dic[station_abbrev])
+            z_part_stations.append(z_adj_dic[station_abbrev])
+            dia_part_stations.append(dia_dic[station_name])
+            names_part_stations.append(station_abbrev_dic[station_abbrev])
+
+
+        mylengths, beam_max, lambd, pix_res = compute_beam_max_and_pix_res(x_part_stations,
+                                                                           y_part_stations,
+                                                                           z_part_stations,
+                                                                           modes)
 
         cell_rad = qa.convert(pix_res, "rad")['value']
         cs.setincrement([-cell_rad, cell_rad], 'direction')
@@ -367,8 +399,10 @@ def create_input_models(sources, pix_res, modes, flux_sources):
         ia.setcoordsys(cs.torecord())
         ia.setbrightnessunit("Jy/pixel")
         ia.modify(cl.torecord(), subtract=False)
-        exportfits(imagename='model_images/' + source_name + '.modelimage.im',
-                   fitsimage='model_images/' + source_name + '.modelimage.fits',
+        exportfits(imagename=('model_images/' + scan['scan_no'] + '_' +
+                              scan['source_name'] + '.modelimage.im'),
+                   fitsimage=('model_images/' + scan['scan_no'] + '_' +
+                              scan['source_name'] + '.modelimage.fits'),
                    overwrite=True)
 
         ia.close()
@@ -475,7 +509,7 @@ def create_noisy_ms(scans, freq_setup, integration_time, npol, flux_sources,
 
 
 
-def corrupt_model_data(scans, pix_res, start_scan, end_scan):
+def corrupt_model_data(scans, pix_res, start_scan, end_scan, modes):
     # Corrupting model image with voltage pattern, copy it to data column of
     # Measurement Set.
 
@@ -495,10 +529,30 @@ def corrupt_model_data(scans, pix_res, start_scan, end_scan):
 
         im.open(noisy_ms_name)
         im.selectvis()
-        im.defineimage(nx=512, ny=512, cellx=pix_res, celly=pix_res,
+
+        x_part_stations = []
+        y_part_stations = []
+        z_part_stations = []
+        dia_part_stations = []
+        names_part_stations = []
+        for station_abbrev in scan['participating_stations']:
+            station_name = station_abbrev_dic[station_abbrev]
+            x_part_stations.append(x_adj_dic[station_abbrev])
+            y_part_stations.append(y_adj_dic[station_abbrev])
+            z_part_stations.append(z_adj_dic[station_abbrev])
+            dia_part_stations.append(dia_dic[station_name])
+            names_part_stations.append(station_abbrev_dic[station_abbrev])
+
+        mylengths, beam_max, lambd, pix_res = compute_beam_max_and_pix_res(x_part_stations,
+                                                                           y_part_stations,
+                                                                           z_part_stations,
+                                                                           modes)
+
+        im.defineimage(nx=1024, ny=1024, cellx=pix_res, celly=pix_res,
                        facets=1)
         im.setoptions(ftmachine='mosaic')
-        im.ft(model='model_images/' + scan['source_name'] + '.modelimage.im', incremental=False)
+        im.ft(model=('model_images/' + scan['scan_no'] + '_' +
+                     scan['source_name'] + '.modelimage.im'), incremental=False)
         im.close()
         im.open(thems=noisy_ms_name)
         uvsub(vis=noisy_ms_name, reverse=True)
@@ -519,7 +573,7 @@ def combine_measurement_sets(scans, start_scan, end_scan):
 
         noisy_ms_name_list.append(noisy_ms_name)
 
-    combined_ms_name = 'all_scans_combined.ms'
+    combined_ms_name = 'all_scans_combined_1024_scan_pix_res.ms'
 
     # Reading files present in the current working directory
     current_files = glob.glob('*')
