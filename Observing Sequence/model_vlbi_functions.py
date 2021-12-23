@@ -96,10 +96,300 @@ def calculate_ref_position(x_part_stations, y_part_stations, z_part_stations):
     cofa_lat,cofa_lon,cofa_alt = u.xyz2long(cofa_x, cofa_y, cofa_z, 'WGS84')
     pos_obs = me.position("WGS84",qa.quantity(cofa_lon, "rad"), qa.quantity(cofa_lat, "rad"), qa.quantity(cofa_alt, "m"))
 
-    print(pos_obs)
+    # print(pos_obs)
     print('\n')
 
     return pos_obs
+
+
+
+
+
+
+
+def elevation(date, stat_name, usehourangle, direction, cofa, totaltime,
+              ndays=1.0, interval='1min', noisecalc=False):
+    """ Function to estimate elevation of source at a given time (or period of
+    time) and for a given telescope. This is a helper function used in
+    calculating the on-source observation time for a telescope and to further
+    estimate the combined noise to corrupt the (simulated) Measurement Set. This
+    function is derived from the ephemeris() function in the "simutil.py" script
+    available in the source code of CASA. The ephemeris() function has been
+    modified in the way that the direction is read and the inclusion of a
+    condition that enables the use of this function in estimation of simple
+    noise.
+
+    Parameters
+    ----------
+    date: str
+            Date of observation in the "year/month/day/time" format.
+            Eg:"2019/03/12/09:30" if the observation date is 12th of March,
+            2019 at 9:30 am. If time is unknown, reference_date=
+            "year/month/day" is sufficient. In this case, time will be set to
+            00:00h.
+    stat_name: str
+            Name of the observing telescope.
+    usehourangle: bool
+            If set to true, the transit of source is used as the reference time
+    ndays: float, optional
+            Number of days over which the elevation of a source is estimated
+            for. Default: 1 day (24 hours).
+    interval: str, optional
+            The elevation of a source is estimated at every
+            ndays*24*60/interval for a specified reference date. The interval
+            is specified in terms of minutes. Default: '1 min'.
+    direction: str
+            Direction of source in format [epoch, RA, DEC].
+            Eg: ['J2000', '00h0m0.0s', '+40d00m00.0s'] for epoch of J2000,
+            Right ascension of 0h and declination of 40d.
+    cofa: str
+            Coordinates of position of observatory in Right-handed Earth-centred
+            system.
+    totaltime: str
+            Total observation time in hours. Eg: '6h' for a total 6 hours of
+            observation time.
+    noisecalc: bool, optional
+            This variable is set to True when using the vlbi_combinednoise()
+            function. This is to be set False when using just to
+            estimate elevation of source. Default: False
+    """
+    ds1 = qa.toangle(direction[1])
+    ds2 = qa.toangle(direction[2])
+    src = me.direction(direction[0], ds1, ds2)
+    me.done()
+    posobs = cofa
+    me.doframe(posobs)
+    time = me.epoch('UTC', date)
+    ref = time['m0']['value']
+    me.doframe(time)
+    offset_ha = qa.convert((me.measure(src, 'hadec'))['m0'], 'h')
+    peak = me.epoch('UTC', qa.add(date, qa.mul(-1, offset_ha)))
+    peaktime_float = peak['m0']['value']
+    pos = 0
+    if usehourangle:
+        # offset the reftime to be at transit:
+        time = peak
+        me.doframe(time)
+
+    reftime_float = time['m0']['value']
+    reftime_floor = np.floor(time['m0']['value'])
+    refdate_str = qa.time(qa.totime(str(reftime_floor) + 'd'), form='dmy')[0]
+
+    timeinc = interval  # for plotting
+    timeinc = qa.convert(qa.time(timeinc)[0], 'd')['value']
+    ntime = int(ndays / timeinc)
+    rset = me.riseset(src)
+    rise = rset['rise']
+    # check for circumpolar
+    if rise == 'above':
+        rise = time
+        rise['m0']['value'] = rise['m0']['value'] - 0.5
+        settime = time
+        settime['m0']['value'] = settime['m0']['value'] + 0.5
+        pos = True
+    elif rise == 'below':
+        rise = time
+        rise['m0']['value'] = rise['m0']['value'] - 0.5
+        settime = time
+        settime['m0']['value'] = settime['m0']['value'] + 0.5
+        pos = False
+        if not noisecalc:
+            print("Source in direction RA = {}h ".format(np.round(ds1['value'],5))
+                  + "and DEC = {} deg ".format(np.round(ds2['value'],5))
+                  + "is not visible with {} telescope.".format(stat_name))
+
+    else:
+        settime = rset['set']
+        rise = me.measure(rise['utc'], 'utc')
+        settime = me.measure(settime['utc'], 'utc')
+        pos = True
+
+    # where to start plotting? If used for noise calculation, the times are
+    # used at reference time & not wrt hourangle.
+    if not noisecalc:
+        offset = -0.5
+        if settime['m0']['value'] < time['m0']['value']:
+            offset -= 0.5
+        if rise['m0']['value'] > time['m0']['value']:
+            offset['m0']['value'] += 0.5
+        time['m0']['value'] += offset
+
+    times = []
+    az = []
+    el = []
+    for i in range(ntime):
+        times.append(time['m0']['value'])
+        me.doframe(time)
+        azel = me.measure(src, 'azel')
+        az.append(qa.convert(azel['m0'], 'deg')['value'])
+        el.append(qa.convert(azel['m1'], 'deg')['value'])
+        time['m0']['value'] += timeinc
+
+    u.msg(
+        "peak=" +
+        qa.time(
+            '%f d' %
+            reftime_float,
+            form='dmy')[0],
+        origin='ephemeris')
+    relpeak = ref - reftime_floor
+    etimeh = qa.convert(totaltime, 'h')['value']
+    return (np.array(times) - reftime_floor) * \
+        24, el, [direction[0], ds1, ds2], refdate_str, relpeak, etimeh, pos
+
+
+def vlbi_plotelevation(scans, start_scan, end_scan, sources, usehourangle=True,
+                       elev_limit=10.0):
+    """ Function to plot Elevation vs. hour angle or Elevation vs.time plots
+    for chosen array, date and direction. The function saves the plot with
+    filename <project_elevation.png>.
+
+    Parameters
+    ----------
+    array: {'EHT', 'GMVA', other}
+            Array of telescopes which is used for simulating the data. If using
+            expert mode with a different configuration of telescopes than
+            default, please specify your own array name.
+
+    project: str
+            Name of the project with .ms file extension. The task creates a
+            Measurement Set with the specified projectname. All the saved
+            products will be prefixed with this projectname.
+            Eg: 'simulation_<arrayname>.ms'
+
+    configfile: str
+            Configuration file containing coordinates (in Earth-centred
+            left-handed coordinates) and diameter and SEFD of the telescopes in
+            the array configuration. Eg: '<path-to-file>/<filename>.confg'.
+
+    totaltime: str
+            Total observation time in hours. Eg.: '6h' for an observation time
+            of 6 hours.
+
+    direction: str
+            Direction of source in format [epoch, RA, DEC].
+            Eg: ['J2000', '00h0m0.0s', '+40d00m00.0s'] for epoch of J2000,
+            Right ascension of 0h and declination of 40d.
+
+    date: str, optional
+            Date of observation in the "year/month/day/time" format.
+            Eg:"2019/03/12/09:30" if the observation date is 12th of March,
+            2019 at 9:30 am. If time is unknown, reference_date=
+            "year/month/day" is sufficient. In this case, time will be set to
+            00:00h. Default: 'today'.
+
+    usehourangle: bool
+            If hourangle is set to True, the elevation of source is computed
+            from culmination. If hourangle is set to False, the elevation is
+            computed from 00:00h of reference date if specified or 'today'
+            which is the day that the simulation tool is being used.
+            Default: True
+
+    elev_limit: float, optional
+            Elevation limit imposed on the observations. Simulated visibilities
+            below this limit are flagged. The UV-coverage, elevation plots and
+            caclulation of combined thermal noise take the elevation limit into
+            consideration. Default: elev_limit = 10.0 implies an elevation
+            limit of 10 degrees.
+    """
+
+    print('Generating elevations plots.')
+
+    for scan in scans[start_scan:end_scan]:
+
+        print(scan['scan_no'])
+
+        names_part_stations = []
+        positions = []
+        for station_abbrev in scan['participating_stations']:
+            names_part_stations.append(station_abbrev_dic[station_abbrev])
+
+            lon, lat, alt = u.xyz2long(x_adj_dic[station_abbrev],
+                                       y_adj_dic[station_abbrev],
+                                       z_adj_dic[station_abbrev],
+                                       'WGS84')
+            pos = me.position("WGS84", qa.quantity(lon, "rad"),
+                              qa.quantity(lat, "rad"), qa.quantity(alt, "m"))
+            positions.append(pos)
+
+        # ndays = scan['observation_time'][0]/(24*60*60)
+        ndays = 1
+
+        xdata = []
+        ydata = []
+        relpeaks = []
+        etimehs = []
+        pos_index = []
+        for i in np.arange(len(positions)):
+            x, y, ds, refdate_str, relpeak, etimeh, pos = elevation(date=scan['start_time'],
+                                                                    stat_name=names_part_stations[i],
+                                                                    usehourangle=usehourangle,
+                                                                    ndays=ndays,
+                                                                    interval='5min',
+                                                                    direction=sources[scan['source_name']],
+                                                                    cofa=positions[i],
+                                                                    totaltime=str(scan['observation_time'][0]) +'s')
+            xdata.append(x)
+            ydata.append(y)
+            relpeaks.append(relpeak)
+            etimehs.append(etimeh)
+            pos_index.append(pos)
+
+        xdata = np.array((xdata))
+        ydata = np.array((ydata))
+        pos_index = np.array((pos_index))
+        positions = np.array((positions))
+        positions = positions[pos_index]
+        stat_names = np.array((names_part_stations))
+        indices = []
+        for k in np.arange(xdata.shape[0]):
+            index = ydata[k] >= elev_limit
+            indices.append(index)
+        indices = np.array((indices))
+        relpeaks = np.array((relpeaks))
+        etimehs = np.array((etimehs))
+        cmap = plt.get_cmap('Set1')
+        colors = [cmap(i) for i in np.linspace(0, 1.0, xdata.shape[0])]
+        plt.figure(figsize=(18,15), dpi=90)
+        for j in np.arange(xdata.shape[0]):
+            plt.plot(xdata[j, indices[j]], ydata[j, indices[j]], '-', color=colors[j],
+                     label='{}'.format((names_part_stations[j] if pos_index[j]
+                                        else '_nolegend_')))
+        if (array == 'EHT' or array == 'GMVA') and pos_index[0]:
+            plt.plot(np.array([relpeaks[0] * 24, etimehs[0] + relpeaks[0] * 24]),
+                     [80, 80], color='black', label='Observation time',
+                     lw = 4)
+        plt.legend(borderpad=0.0, labelspacing=0.5, prop={'size': 16.0},
+                   frameon=False, bbox_to_anchor=(1.0, 1.0))
+        plt.xlabel("Hours relative to " + refdate_str, fontsize=18)
+        plt.ylabel("Elevation (deg)", fontsize=18)
+        ax = plt.gca()
+        labels = ax.get_xticklabels()
+        plt.setp(labels, fontsize=18)
+        labels = ax.get_yticklabels()
+        plt.setp(labels, fontsize=18)
+        plt.title(
+            r"Elevation of {} during scan {} starting at {}".format(
+                scan['source_name'],
+                scan['scan_no'],
+                scan['start_time']), fontsize=18)
+        plt.ylim([0.0, 90])
+        # plt.grid(b=True, ls='--')
+        plt.savefig('elevation_plots/' + scan['scan_no'] + "_elevation.png")
+        plt.close()
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -161,9 +451,12 @@ def perform_observation(scans, station_names, modes, sources,
 
         # Setting limits to flag data such as shadowing or when source is below
         # certain elevation
-        elev_limit = 0
+        # elev_limit = 0
         elev_limit = 10.0
-        sm.setlimits(shadowlimit=0.001, elevationlimit=str(elev_limit) + 'deg')
+
+        shadow_limit = 0
+        # shadow_limit = 0.001
+        sm.setlimits(shadowlimit=shadow_limit, elevationlimit=str(elev_limit) + 'deg')
 
         # Specing feed and autocorrelation parameters
         sm.setfeed('perfect R L')
@@ -178,7 +471,7 @@ def perform_observation(scans, station_names, modes, sources,
         # Setting the integration time and reference time for observation
         sm.settimes(integrationtime=integration_time,
                     usehourangle=False,
-                    referencetime=me.epoch('TAI', scan['start_time']))
+                    referencetime=me.epoch('UTC', scan['start_time']))
 
         # Performing observations
         sm.observe(scan['source_name'], scans[0]['mode'],
@@ -198,12 +491,12 @@ def compute_beam_max_and_pix_res(x_adj_dic, y_adj_dic, z_adj_dic, modes):
 
     # print('Computing maximum baseline and pixel resolution.')
 
-    cx = np.mean(x_adj_dic)
-    cy = np.mean(y_adj_dic)
-    cz = np.mean(z_adj_dic)
+    cx = np.mean(x_adj_dic.values())
+    cy = np.mean(y_adj_dic.values())
+    cz = np.mean(z_adj_dic.values())
     n_antennas = len(x_adj_dic)
-    lat, lon, el = u.itrf2loc(x_adj_dic, y_adj_dic,
-                              z_adj_dic, cx, cy, cz)
+    lat, lon, el = u.itrf2loc(x_adj_dic.values(), y_adj_dic.values(),
+                              z_adj_dic.values(), cx, cy, cz)
     mylengths = np.zeros(n_antennas * (n_antennas - 1) / 2)
     k = 0
     for i in range(n_antennas):
@@ -368,24 +661,24 @@ def create_input_models(sources, pix_res, modes, flux_sources):
         cs = ia.coordsys()
         cs.setunits(['rad', 'rad', '', 'Hz'])
 
-        x_part_stations = []
-        y_part_stations = []
-        z_part_stations = []
-        dia_part_stations = []
-        names_part_stations = []
-        for station_abbrev in scan['participating_stations']:
-            station_name = station_abbrev_dic[station_abbrev]
-            x_part_stations.append(x_adj_dic[station_abbrev])
-            y_part_stations.append(y_adj_dic[station_abbrev])
-            z_part_stations.append(z_adj_dic[station_abbrev])
-            dia_part_stations.append(dia_dic[station_name])
-            names_part_stations.append(station_abbrev_dic[station_abbrev])
-
-
-        mylengths, beam_max, lambd, pix_res = compute_beam_max_and_pix_res(x_part_stations,
-                                                                           y_part_stations,
-                                                                           z_part_stations,
-                                                                           modes)
+        # x_part_stations = []
+        # y_part_stations = []
+        # z_part_stations = []
+        # dia_part_stations = []
+        # names_part_stations = []
+        # for station_abbrev in scan['participating_stations']:
+        #     station_name = station_abbrev_dic[station_abbrev]
+        #     x_part_stations.append(x_adj_dic[station_abbrev])
+        #     y_part_stations.append(y_adj_dic[station_abbrev])
+        #     z_part_stations.append(z_adj_dic[station_abbrev])
+        #     dia_part_stations.append(dia_dic[station_name])
+        #     names_part_stations.append(station_abbrev_dic[station_abbrev])
+        #
+        #
+        # mylengths, beam_max, lambd, pix_res = compute_beam_max_and_pix_res(x_part_stations,
+        #                                                                    y_part_stations,
+        #                                                                    z_part_stations,
+        #                                                                    modes)
 
         cell_rad = qa.convert(pix_res, "rad")['value']
         cs.setincrement([-cell_rad, cell_rad], 'direction')
@@ -530,23 +823,23 @@ def corrupt_model_data(scans, pix_res, start_scan, end_scan, modes):
         im.open(noisy_ms_name)
         im.selectvis()
 
-        x_part_stations = []
-        y_part_stations = []
-        z_part_stations = []
-        dia_part_stations = []
-        names_part_stations = []
-        for station_abbrev in scan['participating_stations']:
-            station_name = station_abbrev_dic[station_abbrev]
-            x_part_stations.append(x_adj_dic[station_abbrev])
-            y_part_stations.append(y_adj_dic[station_abbrev])
-            z_part_stations.append(z_adj_dic[station_abbrev])
-            dia_part_stations.append(dia_dic[station_name])
-            names_part_stations.append(station_abbrev_dic[station_abbrev])
-
-        mylengths, beam_max, lambd, pix_res = compute_beam_max_and_pix_res(x_part_stations,
-                                                                           y_part_stations,
-                                                                           z_part_stations,
-                                                                           modes)
+        # x_part_stations = []
+        # y_part_stations = []
+        # z_part_stations = []
+        # dia_part_stations = []
+        # names_part_stations = []
+        # for station_abbrev in scan['participating_stations']:
+        #     station_name = station_abbrev_dic[station_abbrev]
+        #     x_part_stations.append(x_adj_dic[station_abbrev])
+        #     y_part_stations.append(y_adj_dic[station_abbrev])
+        #     z_part_stations.append(z_adj_dic[station_abbrev])
+        #     dia_part_stations.append(dia_dic[station_name])
+        #     names_part_stations.append(station_abbrev_dic[station_abbrev])
+        #
+        # mylengths, beam_max, lambd, pix_res = compute_beam_max_and_pix_res(x_part_stations,
+        #                                                                    y_part_stations,
+        #                                                                    z_part_stations,
+        #                                                                    modes)
 
         im.defineimage(nx=1024, ny=1024, cellx=pix_res, celly=pix_res,
                        facets=1)
@@ -573,7 +866,7 @@ def combine_measurement_sets(scans, start_scan, end_scan):
 
         noisy_ms_name_list.append(noisy_ms_name)
 
-    combined_ms_name = 'all_scans_combined_1024_scan_pix_res.ms'
+    combined_ms_name = 'all_scans_combined_1024_shadow_0.ms'
 
     # Reading files present in the current working directory
     current_files = glob.glob('*')
