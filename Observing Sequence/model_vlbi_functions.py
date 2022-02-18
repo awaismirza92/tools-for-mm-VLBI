@@ -96,13 +96,45 @@ def calculate_ref_position(x_part_stations, y_part_stations, z_part_stations):
     cofa_lat,cofa_lon,cofa_alt = u.xyz2long(cofa_x, cofa_y, cofa_z, 'WGS84')
     pos_obs = me.position("WGS84",qa.quantity(cofa_lon, "rad"), qa.quantity(cofa_lat, "rad"), qa.quantity(cofa_alt, "m"))
 
-    # print(pos_obs)
+    print(pos_obs)
     print('\n')
 
     return pos_obs
 
 
+def modelvlbi_elevation(scans, x_adj_dic, y_adj_dic, z_adj_dic, sources,
+                        start_scan, end_scan):
+    for scan in scans[start_scan:end_scan]:
 
+        print(scan['scan_no'])
+
+        names_part_stations = []
+        positions = []
+        for station_abbrev in scan['participating_stations']:
+            names_part_stations.append(station_abbrev_dic[station_abbrev])
+
+            lon, lat, alt = u.xyz2long(x_adj_dic[station_abbrev],
+                                       y_adj_dic[station_abbrev],
+                                       z_adj_dic[station_abbrev],
+                                       'WGS84')
+            pos = me.position("WGS84", qa.quantity(lon, "rad"),
+                              qa.quantity(lat, "rad"), qa.quantity(alt, "m"))
+            positions.append(pos)
+
+        for i in np.arange(len(positions)):
+            print(sources[scan['source_name']])
+            # print(u.ephemeris(date=scan['start_time'],
+            #                 direction=sources[scan['source_name']],
+            #                 telescope='GBT',
+            #                 cofa=positions[i]
+            #                  ))
+            print(u.ephemeris(date=scan['start_time'],
+                              direction=(sources[scan['source_name']][0] + ' ' +
+                                         sources[scan['source_name']][1] + ' ' +
+                                         sources[scan['source_name']][2]),
+                              telescope='GBT'
+                              # cofa=positions[i]
+                              ))
 
 
 
@@ -153,19 +185,27 @@ def elevation(date, stat_name, usehourangle, direction, cofa, totaltime,
             function. This is to be set False when using just to
             estimate elevation of source. Default: False
     """
+
     ds1 = qa.toangle(direction[1])
     ds2 = qa.toangle(direction[2])
     src = me.direction(direction[0], ds1, ds2)
     me.done()
+
     posobs = cofa
     me.doframe(posobs)
+
     time = me.epoch('UTC', date)
     ref = time['m0']['value']
     me.doframe(time)
+    print(time)
+
     offset_ha = qa.convert((me.measure(src, 'hadec'))['m0'], 'h')
+    print(offset_ha)
     peak = me.epoch('UTC', qa.add(date, qa.mul(-1, offset_ha)))
-    peaktime_float = peak['m0']['value']
+    # peaktime_float = peak['m0']['value']
     pos = 0
+    print(peak)
+
     if usehourangle:
         # offset the reftime to be at transit:
         time = peak
@@ -173,12 +213,16 @@ def elevation(date, stat_name, usehourangle, direction, cofa, totaltime,
 
     reftime_float = time['m0']['value']
     reftime_floor = np.floor(time['m0']['value'])
+    print(reftime_floor)
     refdate_str = qa.time(qa.totime(str(reftime_floor) + 'd'), form='dmy')[0]
+    print(qa.time(qa.totime(str(reftime_floor) + 'd'), form='dmy'))
+    print(refdate_str)
 
     timeinc = interval  # for plotting
     timeinc = qa.convert(qa.time(timeinc)[0], 'd')['value']
     ntime = int(ndays / timeinc)
     rset = me.riseset(src)
+    print(rset)
     rise = rset['rise']
     # check for circumpolar
     if rise == 'above':
@@ -215,13 +259,11 @@ def elevation(date, stat_name, usehourangle, direction, cofa, totaltime,
         time['m0']['value'] += offset
 
     times = []
-    az = []
     el = []
     for i in range(ntime):
         times.append(time['m0']['value'])
         me.doframe(time)
         azel = me.measure(src, 'azel')
-        az.append(qa.convert(azel['m0'], 'deg')['value'])
         el.append(qa.convert(azel['m1'], 'deg')['value'])
         time['m0']['value'] += timeinc
 
@@ -356,9 +398,16 @@ def vlbi_plotelevation(scans, start_scan, end_scan, sources, usehourangle=True,
                      label='{}'.format((names_part_stations[j] if pos_index[j]
                                         else '_nolegend_')))
         if (array == 'EHT' or array == 'GMVA') and pos_index[0]:
+            print(relpeaks[0])
+            print(etimehs[0])
             plt.plot(np.array([relpeaks[0] * 24, etimehs[0] + relpeaks[0] * 24]),
-                     [80, 80], color='black', label='Observation time',
+                     [80, 80], color='blue', label='Observation time',
                      lw = 4)
+            plt.axvspan(relpeaks[0] * 24, etimehs[0] + relpeaks[0] * 24, color='blue',
+                        alpha=0.2, lw=1)
+            plt.axvspan((relpeaks[0] * 24) - 24, (etimehs[0] + relpeaks[0] * 24) - 24,
+                        color='blue',
+                        alpha=0.2, lw=1)
         plt.legend(borderpad=0.0, labelspacing=0.5, prop={'size': 16.0},
                    frameon=False, bbox_to_anchor=(1.0, 1.0))
         plt.xlabel("Hours relative to " + refdate_str, fontsize=18)
@@ -373,8 +422,8 @@ def vlbi_plotelevation(scans, start_scan, end_scan, sources, usehourangle=True,
                 scan['source_name'],
                 scan['scan_no'],
                 scan['start_time']), fontsize=18)
-        plt.ylim([0.0, 90])
-        # plt.grid(b=True, ls='--')
+        # plt.ylim([0.0, 90])
+        plt.grid(b=True, ls='--')
         plt.savefig('elevation_plots/' + scan['scan_no'] + "_elevation.png")
         plt.close()
 
@@ -407,9 +456,8 @@ def perform_observation(scans, station_names, modes, sources,
         os.system('rm -rf ' + ms_name)
         sm.open(ms_name)
 
-        vp.setpbantresptable(telescope=array, dopb=True,
-                             antresppath='vp_tables/scan_' + scan['scan_no'] + '_vp.tab')
-
+        # vp.setpbantresptable(telescope=array, dopb=True,
+        #                      antresppath='vp_tables/scan_' + scan['scan_no'] + '_vp.tab')
 
         x_part_stations = []
         y_part_stations = []
@@ -428,6 +476,13 @@ def perform_observation(scans, station_names, modes, sources,
                                               z_part_stations)
 
         # Specifying the array configuration
+        print(x_part_stations)
+        print(y_part_stations)
+        print(z_part_stations)
+        print(dia_part_stations)
+        print(names_part_stations)
+        # print(scan_pos_obs)
+
         sm.setconfig(
             telescopename=array,
             x=x_part_stations,
@@ -451,11 +506,11 @@ def perform_observation(scans, station_names, modes, sources,
 
         # Setting limits to flag data such as shadowing or when source is below
         # certain elevation
-        # elev_limit = 0
-        elev_limit = 10.0
+        elev_limit = 0
+        # elev_limit = 10.0
 
-        shadow_limit = 0
-        # shadow_limit = 0.001
+        # shadow_limit = 0
+        shadow_limit = 0.001
         sm.setlimits(shadowlimit=shadow_limit, elevationlimit=str(elev_limit) + 'deg')
 
         # Specing feed and autocorrelation parameters
@@ -465,6 +520,7 @@ def perform_observation(scans, station_names, modes, sources,
 
 
         # Specifing the field to be observed
+        print(scan['source_name'], scan['start_time'], sources[scan['source_name']])
         sm.setfield(sourcename=scan['source_name'],
                     sourcedirection=sources[scan['source_name']])
 
@@ -478,7 +534,8 @@ def perform_observation(scans, station_names, modes, sources,
                    starttime='0 s',
                    stoptime=str(scan['observation_time'][0]) + ' s')
 
-    sm.close()
+        sm.close()
+
     print('Done.\n')
 
 
@@ -515,7 +572,14 @@ def compute_beam_max_and_pix_res(x_adj_dic, y_adj_dic, z_adj_dic, modes):
 
     # Calculating pixel resolution
     pix_res = lambd / beam_max * 180 / np.pi * 3600
+    # pix_res = 1e3 * pix_res
     pix_res = '{}'.format(pix_res) + 'arcsec'
+
+    print('All baselines', np.sort(mylengths))
+    print('Smallest baseline', np.sort(mylengths)[1], ' m')
+    LAS = 1.22 * (lambd / np.sort(mylengths)[1])
+    LAS = np.rad2deg(LAS) * 3600
+    print('LAS: ', LAS, ' arcsec')
 
     print('Done. \n')
 
@@ -641,8 +705,7 @@ def create_input_models(sources, pix_res, modes, flux_sources):
         vp.setpbantresptable(telescope=array, dopb=True,
                          antresppath='vp_tables/scan_' + scan['scan_no'] + '_vp.tab')
 
-        input_model = 'point'  # A string that could be either point,
-        # Gaussian, disk, or limbdarkeneddisk
+
 
         for flux_source in flux_sources:
             if flux_source['source_name'] == scan['source_name']:
@@ -650,13 +713,29 @@ def create_input_models(sources, pix_res, modes, flux_sources):
                 input_model = flux_source['ModelShape']
 
         source_direction = sources[scan['source_name']]
+        # input_model = 'disk'  # A string that could be either point,
+    # # Gaussian, disk, or limbdarkeneddisk
 
-        cl.addcomponent(dir=source_direction, flux=flux, fluxunit='Jy',
-                        freq=modes[0]['freq'][0], shape=input_model)
+        if input_model == 'point':
+            cl.addcomponent(dir=source_direction, flux=flux, fluxunit='Jy',
+                            freq=modes[0]['freq'][0], shape=input_model)
+
+        if (input_model == 'Gaussian' or
+            input_model == 'disk' or
+            input_model == 'limbdarkeneddisk'):
+            cl.addcomponent(dir=source_direction, flux=flux, fluxunit='Jy',
+                            freq=modes[0]['freq'][0], shape=input_model,
+                            majoraxis = '0.001arcsec', minoraxis = '0.001arcsec',
+                            positionangle = '0.0deg')
+
+        # if input_model == 'disk':
+        #     cl.addcomponent(dir=source_direction, flux=flux, fluxunit='Jy',
+        #                     freq=modes[0]['freq'][0], shape=input_model,
+        #                     majoraxis = '0.0001arcsec', minoraxis = '0.0001arcsec')
 
         ia.fromshape(outfile=('model_images/' + scan['scan_no'] + '_' +
                               scan['source_name'] + '.modelimage.im'),
-                     shape=[1024, 1024, 1, 1],
+                     shape=[image_dim, image_dim, 1, 1],
                      overwrite=True)
         cs = ia.coordsys()
         cs.setunits(['rad', 'rad', '', 'Hz'])
@@ -820,8 +899,10 @@ def corrupt_model_data(scans, pix_res, start_scan, end_scan, modes):
         ms_name = 'scan_' + scan['scan_no'] + '.ms'
         noisy_ms_name = ms_name[:-3] + '.noisy.ms'
 
-        im.open(noisy_ms_name)
+        im.open(noisy_ms_name, usescratch=True)
         im.selectvis()
+        # im.selectvis(uvrange='0~5000km')
+        # im.selectvis(uvrange='5000~9000km')
 
         # x_part_stations = []
         # y_part_stations = []
@@ -841,15 +922,20 @@ def corrupt_model_data(scans, pix_res, start_scan, end_scan, modes):
         #                                                                    z_part_stations,
         #                                                                    modes)
 
-        im.defineimage(nx=1024, ny=1024, cellx=pix_res, celly=pix_res,
+        im.defineimage(nx=image_dim, ny=image_dim, cellx=pix_res, celly=pix_res,
                        facets=1)
         im.setoptions(ftmachine='mosaic')
         im.ft(model=('model_images/' + scan['scan_no'] + '_' +
-                     scan['source_name'] + '.modelimage.im'), incremental=False)
+                     scan['source_name'] + '.modelimage.im'),
+              incremental=False)
+        # ft(vis = noisy_ms_name,
+        #    model = ('model_images/' + scan['scan_no'] + '_' +
+        #            scan['source_name'] + '.modelimage.im'),
+        #    incremental=False,
+        #    usescratch=True)
         im.close()
         im.open(thems=noisy_ms_name)
         uvsub(vis=noisy_ms_name, reverse=True)
-        # uvsub(vis=noisy_ms_name)
         im.close()
 
     print('Done. \n')
@@ -866,7 +952,8 @@ def combine_measurement_sets(scans, start_scan, end_scan):
 
         noisy_ms_name_list.append(noisy_ms_name)
 
-    combined_ms_name = 'all_scans_combined_1024_shadow_0.ms'
+    combined_ms_name = 'all_scans_combined_{}.ms'.format('uv_5k_9k')
+    # combined_ms_name = 'all_scans_combined_{}.ms'.format('first_three_scans')
 
     # Reading files present in the current working directory
     current_files = glob.glob('*')

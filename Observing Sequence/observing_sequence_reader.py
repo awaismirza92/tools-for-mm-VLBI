@@ -1,4 +1,5 @@
 from datetime import datetime
+from datetime import timedelta
 import pylab as pl
 import time
 import numpy as np
@@ -9,12 +10,13 @@ t_start = time.time()
 from simutil import simutil
 u = simutil()
 
+vex_file_extension = '.vex.obs'
 
 #%%
 #Specifying values of SEFD & diameter
 print('Specifying SEFDs, diameters & abreviations for stations. ')
 
-SEFD_dic_name = {'EFLSBERG' : 1000,
+SEFD_dic_name = {'EF_DBBC' : 1000,
             'EB_RDBE' : 1000,   
             'ONSALA60' : 5102,
             'YEBES40M' : 1667,
@@ -36,7 +38,8 @@ SEFD_dic_name = {'EFLSBERG' : 1000,
             'LMT' : 1714,
             'PdBure' : 818}
 
-SEFD_dic = {'Eb' : 1000, 
+SEFD_dic = {'Ef' : 1000,
+            'Eb' : 1000,
             'On' : 5102,
             'Ys' : 1667,
             'Mh' : 17647,
@@ -58,7 +61,7 @@ SEFD_dic = {'Eb' : 1000,
             'PB' : 818}
 
 
-dia_dic = {'EFLSBERG' : 80,
+dia_dic = {'EF_DBBC' : 80,
             'EB_RDBE' : 80,       
             'ONSALA60' : 20,
             'YEBES40M' : 40,
@@ -80,7 +83,7 @@ dia_dic = {'EFLSBERG' : 80,
             'LMT' : 50,
             'PdBure' : 33.2}
 
-station_full_name_dic = {'EFLSBERG' : 'Ef',
+station_full_name_dic = {'EF_DBBC' : 'Ef',
             'EB_RDBE' : 'Eb',   
             'ONSALA60' : 'On',
             'YEBES40M' : 'Ys',
@@ -102,7 +105,7 @@ station_full_name_dic = {'EFLSBERG' : 'Ef',
             'LMT' : 'Lm',             #
             'PdBure' : 'PB'}          #
 
-station_abbrev_dic = {'Ef' : 'EFLSBERG', 
+station_abbrev_dic = {'Ef' : 'EF_DBBC',
             'Eb' : 'EB_RDBE' ,   
             'On' : 'ONSALA60',
             'Ys' : 'YEBES40M',
@@ -175,23 +178,23 @@ print('Done. \n')
 
 
 # %%        
-print('Extracting SEFDs & diameters of participating stations.')
-
-SEFD = []
-dia = []
-
-for name in station_names:
-    SEFD.append(SEFD_dic_name[name])
-    dia.append(dia_dic[name])
-
-print('Done. \n')
+# print('Extracting SEFDs & diameters of participating stations.')
+#
+# SEFD = []
+# dia = []
+#
+# for name in station_names:
+#     SEFD.append(SEFD_dic_name[name])
+#     dia.append(dia_dic[name])
+#
+# print('Done. \n')
 
 
 
 #%%
 #reading project name and integration time
 
-with open(file_address + '.vex.difx', 'r') as vex_file:
+with open(file_address + vex_file_extension, 'r') as vex_file:
 
     for line in vex_file.readlines():
 
@@ -206,7 +209,7 @@ with open(file_address + '.vex.difx', 'r') as vex_file:
 print('Reading science targets. ')
 sources = {}
 
-with open(file_address + '.vex.difx', 'r') as vex_file:
+with open(file_address + vex_file_extension, 'r') as vex_file:
 
     for line in vex_file.readlines():
  
@@ -223,7 +226,7 @@ with open(file_address + '.vex.difx', 'r') as vex_file:
             RA = coord_parts[1][:-6]
             direction.append(RA)
             
-            Dec = coord_parts[2][:-18].replace("'", 'm').replace('"', 's')
+            Dec = coord_parts[2][:-18].replace("'", 'm').replace('"', 's').lstrip().rstrip()
             direction.append(Dec)
             
             sources[source_name] = [epoch, RA, Dec]
@@ -239,7 +242,7 @@ scan_stations_abbrev = []
 scan_stations_obs_time = []
 scans = []
 
-with open(file_address + '.vex.difx', 'r') as vex_file:
+with open(file_address + vex_file_extension, 'r') as vex_file:
 
     for line in vex_file.readlines():
 
@@ -255,6 +258,7 @@ with open(file_address + '.vex.difx', 'r') as vex_file:
             line_parts = line.split('=')
 
             start_time = line_parts[1][:-7]
+            # start_time = datetime.strptime(start_time, '%Yy%jd%Hh%Mm%S') + timedelta(hours=4)
             start_time = datetime.strptime(start_time, '%Yy%jd%Hh%Mm%S')
             
             start_date = start_time.strftime('%d-%b-%Y')
@@ -278,6 +282,8 @@ with open(file_address + '.vex.difx', 'r') as vex_file:
                 station_abbrev = 'PV'
             if station_abbrev == 'Ef':
                 station_abbrev = 'Eb'
+            # if station_abbrev == 'Gb':
+            #     continue
             scan_stations_abbrev.append(station_abbrev)
 
             line_parts = line.split(':')
@@ -309,7 +315,7 @@ freq_stations = []
 
 modes = []
 
-with open(file_address + '.vex.difx', 'r') as vex_file:
+with open(file_address + vex_file_extension, 'r') as vex_file:
     vex_file_lines = vex_file.readlines()
     for i, line in enumerate(vex_file_lines):
 
@@ -375,7 +381,7 @@ print('Reading frequency setups.')
 
 freq_defs = []
 
-with open(file_address + '.vex.difx', 'r') as vex_file:
+with open(file_address + vex_file_extension, 'r') as vex_file:
     vex_file_lines = vex_file.readlines()
     for i, line in enumerate(vex_file_lines):
 
@@ -450,7 +456,7 @@ print('Done. \n')
 #reading number of channels
 print('Reading number of channels.')
 
-with open(file_address + '.vex.difx', 'r') as vex_file:
+with open(file_address + vex_file_extension, 'r') as vex_file:
 
     for line in vex_file.readlines():
 
