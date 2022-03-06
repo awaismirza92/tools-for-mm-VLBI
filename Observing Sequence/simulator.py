@@ -31,8 +31,8 @@ array = 'GMVA'
 # array = 'VLA'
 image_dim = 1024
 
-start_scan = 81
-end_scan = 82
+start_scan = 86
+end_scan = 90
 
 # modelvlbi_elevation(scans, x_adj_dic, y_adj_dic, z_adj_dic, sources,
 #                         start_scan, end_scan)
@@ -48,36 +48,40 @@ end_scan = 82
 #
 #
 # # %%
-perform_observation(scans, station_names, modes, sources, integration_time,
-                    start_scan, end_scan)
+# perform_observation(scans, station_names, modes, sources, integration_time,
+#                     start_scan, end_scan)
+# # # #
+# # # #
+# # # # # %%
+mylengths, beam_max, lambd, pix_res = compute_beam_max_and_pix_res(x_adj_dic,
+                                                                   y_adj_dic,
+                                                                   z_adj_dic,
+                                                                   modes)
+# #
+# #
+# #
+# # # # # %%
+source_fluxes_address = '../../source_fluxes.txt'
+flux_file_existance_check(sources, start_date, source_fluxes_address)
+
+
+# # %%
+flux_sources = flux_file_completion_check(sources, source_fluxes_address)
 # # #
 # # #
-# # # # %%
-# mylengths, beam_max, lambd, pix_res = compute_beam_max_and_pix_res(x_adj_dic,
-#                                                                    y_adj_dic,
-#                                                                    z_adj_dic,
-#                                                                    modes)
-#
-#
-#
-# # # # %%
-# source_fluxes_address = '../../source_fluxes.txt'
-# flux_file_existance_check(sources, start_date, source_fluxes_address)
-#
-#
-# # # %%
-# flux_sources = flux_file_completion_check(sources, source_fluxes_address)
-# # #
-# # #
+
+# fits_header_check(flux_sources)
+user_model_images(flux_sources)
+
 # create_input_models(sources, pix_res, modes, flux_sources)
-#
-# #Create noisy ms.
-# create_noisy_ms(scans, freq_setup, integration_time, npol, flux_sources,
-#                 start_scan, end_scan)
-#
-#
-#
-# #%%
+# #
+# # #Create noisy ms.
+# # create_noisy_ms(scans, freq_setup, integration_time, npol, flux_sources,
+# #                 start_scan, end_scan)
+# #
+# #
+# #
+# # #%%
 # corrupt_model_data(scans, pix_res, start_scan, end_scan, modes)
 # #
 # # #%%

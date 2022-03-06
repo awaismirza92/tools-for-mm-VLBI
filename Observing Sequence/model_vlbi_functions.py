@@ -4,7 +4,7 @@
 import os
 import sys
 import numpy as np
-
+import pprint
 
 
 def vlbi_vp(scans, modes, station_abbrev_dic, dia_dic,
@@ -476,11 +476,11 @@ def perform_observation(scans, station_names, modes, sources,
                                               z_part_stations)
 
         # Specifying the array configuration
-        print(x_part_stations)
-        print(y_part_stations)
-        print(z_part_stations)
-        print(dia_part_stations)
-        print(names_part_stations)
+        # print(x_part_stations)
+        # print(y_part_stations)
+        # print(z_part_stations)
+        # print(dia_part_stations)
+        # print(names_part_stations)
         # print(scan_pos_obs)
 
         sm.setconfig(
@@ -520,7 +520,7 @@ def perform_observation(scans, station_names, modes, sources,
 
 
         # Specifing the field to be observed
-        print(scan['source_name'], scan['start_time'], sources[scan['source_name']])
+        # print(scan['source_name'], scan['start_time'], sources[scan['source_name']])
         sm.setfield(sourcename=scan['source_name'],
                     sourcedirection=sources[scan['source_name']])
 
@@ -605,6 +605,9 @@ def flux_file_existance_check(sources, start_date, source_fluxes_address,
                             'Freq(Hz)'.ljust(14) +
                             'ModelShape'.ljust(14) +
                             'Flux(Jy)'.ljust(14) +
+                            'FluxError(Jy)'.ljust(14) +
+                            'MajorAxis(arcsec)'.ljust(18) +
+                            'MinorAxis(arcsec)'.ljust(14) +
                             '\n')
         for source_name in sources.keys():
             template_file.write(source_name.ljust(14) +
@@ -612,6 +615,9 @@ def flux_file_existance_check(sources, start_date, source_fluxes_address,
                                 freq.ljust(14) +
                                 'point'.ljust(14) +
                                 '99'.ljust(14) +
+                                '99'.ljust(14) +
+                                '0.001'.ljust(18) +
+                                '0.001'.ljust(14) +
                                 '\n')
         template_file.close()
 
@@ -645,7 +651,21 @@ def flux_file_completion_check(sources, source_fluxes_address):
             flux_source['date'] = line_parts[1]
             flux_source['freq'] = line_parts[2]
             flux_source['ModelShape'] = line_parts[3]
-            flux_source['flux'] = float(line_parts[4])
+
+            if line_parts[4] == '-':
+                flux_source['flux'] = line_parts[4]
+            else:
+                flux_source['flux'] = float(line_parts[4])
+
+            if line_parts[6] == '-':
+                flux_source['MajorAxis'] = line_parts[6]
+            else:
+                flux_source['MajorAxis'] = float(line_parts[6])
+
+            if line_parts[7] == '-':
+                flux_source['MinorAxis'] = line_parts[7]
+            else:
+                flux_source['MinorAxis'] = float(line_parts[7])
 
             flux_sources.append(flux_source)
 
@@ -654,7 +674,8 @@ def flux_file_completion_check(sources, source_fluxes_address):
                       "'source_fluxes.txt': ")
                 initial_print = False
 
-            print(flux_source)
+            pprint.pprint(flux_source)
+            print('\n')
 
             if flux_source['flux'] == '--':
                 print("The flux for % is -- which" % flux_source['source_name'] +
@@ -683,6 +704,59 @@ def flux_file_completion_check(sources, source_fluxes_address):
 
 
 
+def fits_header_check(flux_sources):
+
+    s_3C84_header = imhead(imagename='model_images/0484_3C84.modelimage.fits',
+                           mode='list')
+
+    for flux_source in flux_sources:
+        # if '.fits' in flux_source['ModelShape']:
+        if '.im' in flux_source['ModelShape']:
+            print(flux_source['ModelShape'])
+            header = imhead(imagename='model_images/more/' + flux_source['ModelShape'],
+                   mode='list')
+            pprint.pprint(header)
+            print('\n')
+
+            for key, value in s_3C84_header.items():
+                print(key)
+                if key not in ['datamin', 'datamax', 'shape', 'minpixpos', 'maxpixpos']:
+                    imhead(imagename='model_images/more/' + flux_source['ModelShape'],
+                           mode='put', hdkey=key, hdvalue=str(value))
+                    print('\n')
+
+            header = imhead(imagename='model_images/more/' + flux_source['ModelShape'],
+                            mode='list')
+            pprint.pprint(header)
+            print('\n')
+
+
+    # for flux_source in flux_sources:
+    #     # if '.fits' in flux_source['ModelShape']:
+
+    #         print(flux_source['ModelShape'])
+    #
+    #         for key, value in s_3C84_header.items():
+    #             print(key)
+    #             if key not in ['datamin', 'datamax', 'shape', 'minpixpos', 'maxpixpos']:
+    #                 imhead(imagename='model_images/more/' + flux_source['ModelShape'],
+    #                        mode='put', hdkey=key, hdvalue=value)
+    #                 print('\n')
+    #
+    #         header = imhead(imagename='model_images/more/' + flux_source['ModelShape'],
+    #                         mode='list')
+    #         pprint.pprint(header)
+    #         print('\n')
+
+
+def user_model_images(flux_sources):
+    for flux_source in flux_sources:
+        if '.fits' in flux_source['ModelShape']:
+            print(flux_source['ModelShape'])
+            ia.open('model_images/more/' + flux_source['ModelShape'])
+            
+
+
 
 def create_input_models(sources, pix_res, modes, flux_sources):
 
@@ -694,38 +768,38 @@ def create_input_models(sources, pix_res, modes, flux_sources):
     for scan in scans[start_scan:end_scan]:
     # for source_name, source_direction in sources.items():
 
+        for flux_source in flux_sources:
+            if flux_source['source_name'] == scan['source_name']:
+                flux = flux_source['flux']
+                input_model = flux_source['ModelShape']
+                major_axis = flux_source['MajorAxis']
+                minor_axis = flux_source['MinorAxis']
 
-
-        print("Creating the model image with the filename: {} ."
-              .format(scan['source_name'] + '.modelimage.im for scan ' +
-                      scan['scan_no']))
+        if '.im' in input_model:
+            continue
 
         cl.done()
 
         vp.setpbantresptable(telescope=array, dopb=True,
                          antresppath='vp_tables/scan_' + scan['scan_no'] + '_vp.tab')
 
-
-
-        for flux_source in flux_sources:
-            if flux_source['source_name'] == scan['source_name']:
-                flux = flux_source['flux']
-                input_model = flux_source['ModelShape']
+        print("Creating the model image with the filename: {} ."
+              .format(scan['source_name'] + '.modelimage.im for scan ' +
+                      scan['scan_no']))
 
         source_direction = sources[scan['source_name']]
         # input_model = 'disk'  # A string that could be either point,
-    # # Gaussian, disk, or limbdarkeneddisk
+    # # Gaussian, disk
 
         if input_model == 'point':
             cl.addcomponent(dir=source_direction, flux=flux, fluxunit='Jy',
                             freq=modes[0]['freq'][0], shape=input_model)
 
         if (input_model == 'Gaussian' or
-            input_model == 'disk' or
-            input_model == 'limbdarkeneddisk'):
+            input_model == 'disk'):
             cl.addcomponent(dir=source_direction, flux=flux, fluxunit='Jy',
                             freq=modes[0]['freq'][0], shape=input_model,
-                            majoraxis = '0.001arcsec', minoraxis = '0.001arcsec',
+                            majoraxis = major_axis, minoraxis = minor_axis,
                             positionangle = '0.0deg')
 
         # if input_model == 'disk':
@@ -733,7 +807,7 @@ def create_input_models(sources, pix_res, modes, flux_sources):
         #                     freq=modes[0]['freq'][0], shape=input_model,
         #                     majoraxis = '0.0001arcsec', minoraxis = '0.0001arcsec')
 
-        ia.fromshape(outfile=('model_images/' + scan['scan_no'] + '_' +
+        ia.fromshape(outfile=('model_images/' +
                               scan['source_name'] + '.modelimage.im'),
                      shape=[image_dim, image_dim, 1, 1],
                      overwrite=True)
@@ -771,9 +845,9 @@ def create_input_models(sources, pix_res, modes, flux_sources):
         ia.setcoordsys(cs.torecord())
         ia.setbrightnessunit("Jy/pixel")
         ia.modify(cl.torecord(), subtract=False)
-        exportfits(imagename=('model_images/' + scan['scan_no'] + '_' +
+        exportfits(imagename=('model_images/' +
                               scan['source_name'] + '.modelimage.im'),
-                   fitsimage=('model_images/' + scan['scan_no'] + '_' +
+                   fitsimage=('model_images/' +
                               scan['source_name'] + '.modelimage.fits'),
                    overwrite=True)
 
@@ -897,7 +971,8 @@ def corrupt_model_data(scans, pix_res, start_scan, end_scan, modes):
                              antresppath='vp_tables/scan_' + scan['scan_no'] + '_vp.tab')
 
         ms_name = 'scan_' + scan['scan_no'] + '.ms'
-        noisy_ms_name = ms_name[:-3] + '.noisy.ms'
+        # noisy_ms_name = ms_name[:-3] + '.noisy.ms'
+        noisy_ms_name = ms_name
 
         im.open(noisy_ms_name, usescratch=True)
         im.selectvis()
@@ -925,14 +1000,25 @@ def corrupt_model_data(scans, pix_res, start_scan, end_scan, modes):
         im.defineimage(nx=image_dim, ny=image_dim, cellx=pix_res, celly=pix_res,
                        facets=1)
         im.setoptions(ftmachine='mosaic')
-        im.ft(model=('model_images/' + scan['scan_no'] + '_' +
+
+        for flux_source in flux_sources:
+            if flux_source['source_name'] == scan['source_name']:
+                input_model = flux_source['ModelShape']
+
+        if '.im' in input_model:
+            im.ft(model=('model_images/more/' + input_model),
+                  incremental=False)
+        else:
+            im.ft(model=('model_images/' + scan['scan_no'] + '_' +
                      scan['source_name'] + '.modelimage.im'),
-              incremental=False)
+                 incremental=False)
+
         # ft(vis = noisy_ms_name,
         #    model = ('model_images/' + scan['scan_no'] + '_' +
         #            scan['source_name'] + '.modelimage.im'),
         #    incremental=False,
         #    usescratch=True)
+
         im.close()
         im.open(thems=noisy_ms_name)
         uvsub(vis=noisy_ms_name, reverse=True)
