@@ -10,7 +10,7 @@ t_start = time.time()
 from simutil import simutil
 u = simutil()
 
-vex_file_extension = '.vex.obs'
+# vex_file_extension = '.vex.obs'
 
 #%%
 #Specifying values of SEFD & diameter
@@ -143,7 +143,7 @@ z_adj_dic = {}
 station_names = []
 
 line_counter = 0
-with open(file_address + '.sum', 'r') as sum_file:
+with open(sum_file_address, 'r') as sum_file:
     lines_list = sum_file.readlines()
     
     for line in lines_list:
@@ -194,7 +194,7 @@ print('Done. \n')
 #%%
 #reading project name and integration time
 
-with open(file_address + vex_file_extension, 'r') as vex_file:
+with open(vex_file_address, 'r') as vex_file:
 
     for line in vex_file.readlines():
 
@@ -209,7 +209,7 @@ with open(file_address + vex_file_extension, 'r') as vex_file:
 print('Reading science targets. ')
 sources = {}
 
-with open(file_address + vex_file_extension, 'r') as vex_file:
+with open(vex_file_address, 'r') as vex_file:
 
     for line in vex_file.readlines():
  
@@ -242,7 +242,7 @@ scan_stations_abbrev = []
 scan_stations_obs_time = []
 scans = []
 
-with open(file_address + vex_file_extension, 'r') as vex_file:
+with open(vex_file_address, 'r') as vex_file:
 
     for line in vex_file.readlines():
 
@@ -315,7 +315,7 @@ freq_stations = []
 
 modes = []
 
-with open(file_address + vex_file_extension, 'r') as vex_file:
+with open(vex_file_address, 'r') as vex_file:
     vex_file_lines = vex_file.readlines()
     for i, line in enumerate(vex_file_lines):
 
@@ -381,7 +381,7 @@ print('Reading frequency setups.')
 
 freq_defs = []
 
-with open(file_address + vex_file_extension, 'r') as vex_file:
+with open(vex_file_address, 'r') as vex_file:
     vex_file_lines = vex_file.readlines()
     for i, line in enumerate(vex_file_lines):
 
@@ -456,7 +456,7 @@ print('Done. \n')
 #reading number of channels
 print('Reading number of channels.')
 
-with open(file_address + vex_file_extension, 'r') as vex_file:
+with open(vex_file_address, 'r') as vex_file:
 
     for line in vex_file.readlines():
 
