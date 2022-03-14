@@ -711,7 +711,7 @@ def fits_header_check(flux_sources):
 
     for flux_source in flux_sources:
         # if '.fits' in flux_source['ModelShape']:
-        if '.im' in flux_source['ModelShape']:
+        if '.fits' in flux_source['ModelShape']:
             print(flux_source['ModelShape'])
             header = imhead(imagename='model_images/more/' + flux_source['ModelShape'],
                    mode='list')
@@ -731,30 +731,55 @@ def fits_header_check(flux_sources):
             print('\n')
 
 
-    # for flux_source in flux_sources:
-    #     # if '.fits' in flux_source['ModelShape']:
-
-    #         print(flux_source['ModelShape'])
-    #
-    #         for key, value in s_3C84_header.items():
-    #             print(key)
-    #             if key not in ['datamin', 'datamax', 'shape', 'minpixpos', 'maxpixpos']:
-    #                 imhead(imagename='model_images/more/' + flux_source['ModelShape'],
-    #                        mode='put', hdkey=key, hdvalue=value)
-    #                 print('\n')
-    #
-    #         header = imhead(imagename='model_images/more/' + flux_source['ModelShape'],
-    #                         mode='list')
-    #         pprint.pprint(header)
-    #         print('\n')
 
 
-def user_model_images(flux_sources):
+
+def user_model_images(flux_sources, pix_res):
+
     for flux_source in flux_sources:
         if '.fits' in flux_source['ModelShape']:
             print(flux_source['ModelShape'])
-            ia.open('model_images/more/' + flux_source['ModelShape'])
-            
+            ia.close()
+            # ia.open('model_images/more/' + flux_source['ModelShape'])
+            ia.open('model_images/more/' + 'user_gaussian.fits')
+            pixel_values = ia.getregion()
+            print(pixel_values)
+
+            ia.close()
+
+            model_name, model_ext = flux_source['ModelShape'].split('.')
+            print(model_name, model_ext)
+            ia.fromshape(outfile=('model_images/more/'+'new_'+model_name+'.im'),
+                         shape=[pixel_values.shape[0], pixel_values.shape[1], 1, 1],
+                         overwrite=True)
+            cs = ia.coordsys()
+            cs.setunits(['rad', 'rad', '', 'Hz'])
+
+            cell_rad = qa.convert(pix_res, "rad")['value']
+            cs.setincrement([-cell_rad, cell_rad], 'direction')
+
+            source_direction = sources['3C279']
+            print(source_direction)
+            cs.setreferencevalue([qa.convert(source_direction[1], 'rad')['value'],
+                                  qa.convert(source_direction[2], 'rad')['value']],
+                                 type="direction")
+
+            cs.setreferencevalue(modes[0]['freq'][0], 'spectral')
+            cs.setincrement(qa.convert(modes[0]['freq_resolution'][0], 'GHz'),
+                            'spectral')
+            ia.setcoordsys(cs.torecord())
+            ia.setbrightnessunit("Jy/pixel")
+
+            ia.putregion(pixels=pixel_values)
+            # ia.putregion(pixels=pixel_values/pixel_values.max())
+
+            exportfits(imagename=('model_images/more/'+'new_'+model_name+'.im'),
+                       fitsimage=('model_images/more/'+'new_'+model_name+'.fits'),
+                       overwrite=True)
+
+            ia.close()
+
+
 
 
 
@@ -788,8 +813,6 @@ def create_input_models(sources, pix_res, modes, flux_sources):
                       scan['scan_no']))
 
         source_direction = sources[scan['source_name']]
-        # input_model = 'disk'  # A string that could be either point,
-    # # Gaussian, disk
 
         if input_model == 'point':
             cl.addcomponent(dir=source_direction, flux=flux, fluxunit='Jy',
@@ -802,10 +825,6 @@ def create_input_models(sources, pix_res, modes, flux_sources):
                             majoraxis = major_axis, minoraxis = minor_axis,
                             positionangle = '0.0deg')
 
-        # if input_model == 'disk':
-        #     cl.addcomponent(dir=source_direction, flux=flux, fluxunit='Jy',
-        #                     freq=modes[0]['freq'][0], shape=input_model,
-        #                     majoraxis = '0.0001arcsec', minoraxis = '0.0001arcsec')
 
         ia.fromshape(outfile=('model_images/' +
                               scan['source_name'] + '.modelimage.im'),
@@ -1005,8 +1024,9 @@ def corrupt_model_data(scans, pix_res, start_scan, end_scan, modes):
             if flux_source['source_name'] == scan['source_name']:
                 input_model = flux_source['ModelShape']
 
-        if '.im' in input_model:
-            im.ft(model=('model_images/more/' + input_model),
+        if '.fits' in input_model:
+            print(scan['scan_no'], 'inside')
+            im.ft(model=('model_images/more/' + 'new_user_gaussian.im'),
                   incremental=False)
         else:
             im.ft(model=('model_images/' + scan['scan_no'] + '_' +
