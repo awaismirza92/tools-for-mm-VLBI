@@ -1,10 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
-import os
-import sys
-import numpy as np
-import pprint
+
 
 
 def vlbi_vp(scans, modes, station_abbrev_dic, dia_dic,
@@ -96,45 +93,11 @@ def calculate_ref_position(x_part_stations, y_part_stations, z_part_stations):
     cofa_lat,cofa_lon,cofa_alt = u.xyz2long(cofa_x, cofa_y, cofa_z, 'WGS84')
     pos_obs = me.position("WGS84",qa.quantity(cofa_lon, "rad"), qa.quantity(cofa_lat, "rad"), qa.quantity(cofa_alt, "m"))
 
-    print(pos_obs)
-    print('\n')
+    # print(pos_obs)
+    # print('\n')
 
     return pos_obs
 
-
-def modelvlbi_elevation(scans, x_adj_dic, y_adj_dic, z_adj_dic, sources,
-                        start_scan, end_scan):
-    for scan in scans[start_scan:end_scan]:
-
-        print(scan['scan_no'])
-
-        names_part_stations = []
-        positions = []
-        for station_abbrev in scan['participating_stations']:
-            names_part_stations.append(station_abbrev_dic[station_abbrev])
-
-            lon, lat, alt = u.xyz2long(x_adj_dic[station_abbrev],
-                                       y_adj_dic[station_abbrev],
-                                       z_adj_dic[station_abbrev],
-                                       'WGS84')
-            pos = me.position("WGS84", qa.quantity(lon, "rad"),
-                              qa.quantity(lat, "rad"), qa.quantity(alt, "m"))
-            positions.append(pos)
-
-        for i in np.arange(len(positions)):
-            print(sources[scan['source_name']])
-            # print(u.ephemeris(date=scan['start_time'],
-            #                 direction=sources[scan['source_name']],
-            #                 telescope='GBT',
-            #                 cofa=positions[i]
-            #                  ))
-            print(u.ephemeris(date=scan['start_time'],
-                              direction=(sources[scan['source_name']][0] + ' ' +
-                                         sources[scan['source_name']][1] + ' ' +
-                                         sources[scan['source_name']][2]),
-                              telescope='GBT'
-                              # cofa=positions[i]
-                              ))
 
 
 
@@ -424,7 +387,16 @@ def vlbi_plotelevation(scans, start_scan, end_scan, sources, usehourangle=True,
                 scan['start_time']), fontsize=18)
         # plt.ylim([0.0, 90])
         plt.grid(b=True, ls='--')
+
+        # Reading files present in the current working directory
+        current_files = glob.glob('*')
+
+        # Deleting existing (if any) elevation_plots directory
+        if 'elevation_plots' not in current_files:
+            os.system('mkdir elevation_plots')
+
         plt.savefig('elevation_plots/' + scan['scan_no'] + "_elevation.png")
+        print('check')
         plt.close()
 
 
@@ -452,8 +424,20 @@ def perform_observation(scans, station_names, modes, sources,
 
         print(scan['scan_no'])
 
-        ms_name = 'scan_' + scan['scan_no'] + '.ms'
-        os.system('rm -rf ' + ms_name)
+        # Reading files present in the current working directory
+        current_files = glob.glob('*')
+
+        # Making individual_scans directory if it does not exits already
+        if 'individual_scans' not in current_files:
+            os.system('mkdir individual_scans')
+
+        ms_name = 'individual_scans/scan_' + scan['scan_no'] + '.ms'
+
+        # Removing existing scan
+        individual_scans_files = glob.glob('individual_scans/*')
+        if 'scan_' + scan['scan_no'] + '.ms' in individual_scans_files:
+            os.system('rm -rf ' + ms_name)
+
         sm.open(ms_name)
 
         # vp.setpbantresptable(telescope=array, dopb=True,
@@ -546,7 +530,7 @@ def compute_beam_max_and_pix_res(x_adj_dic, y_adj_dic, z_adj_dic, modes):
     # COFA (latitude, longitude) on the WGS84 reference ellipsoid, with z
     # normal to the ellipsoid and y pointing north.
 
-    # print('Computing maximum baseline and pixel resolution.')
+    print('Computing maximum baseline and pixel resolution.')
 
     cx = np.mean(x_adj_dic.values())
     cy = np.mean(y_adj_dic.values())
@@ -575,11 +559,11 @@ def compute_beam_max_and_pix_res(x_adj_dic, y_adj_dic, z_adj_dic, modes):
     # pix_res = 1e3 * pix_res
     pix_res = '{}'.format(pix_res) + 'arcsec'
 
-    print('All baselines', np.sort(mylengths))
-    print('Smallest baseline', np.sort(mylengths)[1], ' m')
-    LAS = 1.22 * (lambd / np.sort(mylengths)[1])
+    # print('All baselines', np.sort(mylengths))
+    print('Smallest baseline: ' + str(np.sort(mylengths)[0]) + ' m')
+    LAS = 1.22 * (lambd / np.sort(mylengths)[0])
     LAS = np.rad2deg(LAS) * 3600
-    print('LAS: ', LAS, ' arcsec')
+    print('LAS: ' + str(LAS) + ' arcsec')
 
     print('Done. \n')
 
@@ -674,8 +658,9 @@ def flux_file_completion_check(sources, source_fluxes_address):
                       "'source_fluxes.txt': ")
                 initial_print = False
 
-            pprint.pprint(flux_source)
-            print('\n')
+            # pprint.pprint(flux_source)
+            print(flux_source)
+            # print('\n')
 
             if flux_source['flux'] == '--':
                 print("The flux for % is -- which" % flux_source['source_name'] +
@@ -805,8 +790,8 @@ def create_input_models(sources, pix_res, modes, flux_sources):
 
         cl.done()
 
-        vp.setpbantresptable(telescope=array, dopb=True,
-                         antresppath='vp_tables/scan_' + scan['scan_no'] + '_vp.tab')
+        # vp.setpbantresptable(telescope=array, dopb=True,
+        #                  antresppath='vp_tables/scan_' + scan['scan_no'] + '_vp.tab')
 
         print("Creating the model image with the filename: {} ."
               .format(scan['source_name'] + '.modelimage.im for scan ' +
@@ -877,6 +862,52 @@ def create_input_models(sources, pix_res, modes, flux_sources):
 
 
 
+def read_tsys(antabfs_file, scan_no):
+    with open(antabfs_file , 'r') as file:
+        lines = file.readlines()
+
+        for i, line in enumerate(lines):
+            if scan_no in line:
+                scan_start_line_number = i
+                print(line)
+
+        tsys_per_channel = []
+        for i, line in enumerate(lines[scan_start_line_number + 1:]):
+            if ('!' not in line):
+                line_parts = line.split(' ')
+                tsys_per_channel.append([float(t_sys) for t_sys in line_parts[2:-2]])
+                print(line)
+
+                # break
+
+
+            if 'scan' in line and scan_no not in line:
+                break
+
+        # print(tsys_per_channel)
+        # print(len(tsys_per_channel))
+
+        tsys_per_channel = np.array(tsys_per_channel)
+        tsys_mean = np.mean(tsys_per_channel, axis = 0)
+        # print(len(tsys_mean))
+        print(tsys_mean)
+
+            # if ('!' not in line and
+            #     'GAIN' not in line and
+            #     'POLY' not in line and
+            #     'TSYS' not in line and
+            #     'INDEX' not in line and
+            #     '/' not in line and
+            #     line_parts[0] != '\n'):
+            #
+            #     print(line_parts[0])
+            #     print(type(scan_no))
+            #     break
+
+
+
+
+
 
 def create_noisy_ms(scans, freq_setup, integration_time, npol, flux_sources,
                     start_scan, end_scan):
@@ -889,6 +920,9 @@ def create_noisy_ms(scans, freq_setup, integration_time, npol, flux_sources,
     eta_c = (0.88 if nbits == 2 else 0.64)  # Correlation efficient remains 0.88 if nbits = 2
     # nbase = len(mylengths)                  # Number of baselines
 
+    # Reading files present in the antabsfs files directory
+    antabfs_directory_files = glob.glob(antabfs_files_address + '*')
+
     sigma_array = []
     for scan in scans[start_scan:end_scan]:
 
@@ -899,14 +933,19 @@ def create_noisy_ms(scans, freq_setup, integration_time, npol, flux_sources,
         vp.setpbantresptable(telescope=array, dopb=True,
                              antresppath='vp_tables/scan_' + scan['scan_no'] + '_vp.tab')
 
-        for flux_source in flux_sources:
-            if scan['source_name'] in flux_source.values():
-                print('Source flux: ' + str(flux_source['flux']))
-
-
         participating_stations_sefds = []
         for station in scan['participating_stations']:
-            participating_stations_sefds.append(SEFD_dic[station])
+            for antabfs_file in antabfs_directory_files:
+                # print(file)
+                if station.lower() in antabfs_file and '.ps' not in antabfs_file:
+                    print(antabfs_file)
+                    break
+
+            read_tsys(antabfs_file, scan['scan_no'])
+            break
+            # participating_stations_sefds.append(SEFD_dic[station])
+
+        break
 
         # Calculating overall SEFD
         participating_stations_sefds = np.array(participating_stations_sefds)
@@ -986,17 +1025,15 @@ def corrupt_model_data(scans, pix_res, start_scan, end_scan, modes):
 
         print(scan['scan_no'])
 
-        vp.setpbantresptable(telescope=array, dopb=True,
-                             antresppath='vp_tables/scan_' + scan['scan_no'] + '_vp.tab')
+        # vp.setpbantresptable(telescope=array, dopb=True,
+        #                      antresppath='vp_tables/scan_' + scan['scan_no'] + '_vp.tab')
 
-        ms_name = 'scan_' + scan['scan_no'] + '.ms'
+        ms_name = 'individual_scans/scan_' + scan['scan_no'] + '.ms'
         # noisy_ms_name = ms_name[:-3] + '.noisy.ms'
         noisy_ms_name = ms_name
 
         im.open(noisy_ms_name, usescratch=True)
         im.selectvis()
-        # im.selectvis(uvrange='0~5000km')
-        # im.selectvis(uvrange='5000~9000km')
 
         # x_part_stations = []
         # y_part_stations = []
@@ -1029,7 +1066,7 @@ def corrupt_model_data(scans, pix_res, start_scan, end_scan, modes):
             im.ft(model=('model_images/more/' + 'new_user_gaussian.im'),
                   incremental=False)
         else:
-            im.ft(model=('model_images/' + scan['scan_no'] + '_' +
+            im.ft(model=('model_images/' +
                      scan['source_name'] + '.modelimage.im'),
                  incremental=False)
 
