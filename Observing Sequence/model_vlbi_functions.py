@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-
-
+import numpy as np
 
 
 def vlbi_vp(scans, modes, station_abbrev_dic, dia_dic,
@@ -87,9 +86,9 @@ def calculate_ref_position(x_part_stations, y_part_stations, z_part_stations):
     # print('Calculating reference position of the antenna configuration.')
     #Calculating reference position of the antenna configuration
 
-    cofa_x = pl.average(x_part_stations)
-    cofa_y = pl.average(y_part_stations)
-    cofa_z = pl.average(z_part_stations)
+    cofa_x = np.average(x_part_stations)
+    cofa_y = np.average(y_part_stations)
+    cofa_z = np.average(z_part_stations)
     cofa_lat,cofa_lon,cofa_alt = u.xyz2long(cofa_x, cofa_y, cofa_z, 'WGS84')
     pos_obs = me.position("WGS84",qa.quantity(cofa_lon, "rad"), qa.quantity(cofa_lat, "rad"), qa.quantity(cofa_alt, "m"))
 
@@ -479,14 +478,6 @@ def perform_observation(scans, station_names, modes, sources,
             # referencelocation=me.observatory('ALMA'))
             referencelocation = scan_pos_obs)
 
-        # Specifying spectral windows
-        sm.setspwindow(
-            spwname=scans[0]['mode'],
-            freq=modes[0]['freq'][0],
-            deltafreq=modes[0]['freq_resolution'][0],
-            freqresolution=modes[0]['freq_resolution'][0],
-            nchannels=modes[0]['n_channels'][0],
-            stokes='RR LL')
 
         # Setting limits to flag data such as shadowing or when source is below
         # certain elevation
@@ -512,6 +503,18 @@ def perform_observation(scans, station_names, modes, sources,
         sm.settimes(integrationtime=integration_time,
                     usehourangle=False,
                     referencetime=me.epoch('UTC', scan['start_time']))
+
+        # channel_names = ['ch_' + '{}'.format(i).zfill(2)
+        #                  for i in np.arange(0, modes[0]['n_channels'][0])]
+
+        # Specifying spectral windows
+        sm.setspwindow(
+            spwname=scans[0]['mode'],
+            freq=modes[0]['freq'][0],
+            deltafreq=modes[0]['freq_resolution'][0],
+            freqresolution=modes[0]['freq_resolution'][0],
+            nchannels=modes[0]['n_channels'][0],
+            stokes='RR LL')
 
         # Performing observations
         sm.observe(scan['source_name'], scans[0]['mode'],
@@ -862,50 +865,66 @@ def create_input_models(sources, pix_res, modes, flux_sources):
 
 
 
-def read_tsys(antabfs_file, scan_no):
+def read_tsys(antabfs_file, scan, station, next_scan):
     with open(antabfs_file , 'r') as file:
         lines = file.readlines()
 
-        for i, line in enumerate(lines):
-            if scan_no in line:
-                scan_start_line_number = i
-                print(line)
-
         tsys_per_channel = []
-        for i, line in enumerate(lines[scan_start_line_number + 1:]):
-            if ('!' not in line):
+        if station in ['Ku', 'Kt', 'Ky']:
+            for i, line in enumerate(lines):
+                if '!DOY UT TSYS*' in line:
+                    scan_start_line_number = i
+                    print(line)
+
+            for i, line in enumerate(lines[scan_start_line_number + 1:]):
+
                 line_parts = line.split(' ')
-                tsys_per_channel.append([float(t_sys) for t_sys in line_parts[2:-2]])
-                print(line)
+                if ('!' not in line and line_parts[0].isdigit()):
+                    read_time = line_parts[0] + ':' + line_parts[1]
+                    read_time = datetime.strptime(read_time, '%j:%H:%M:%S')
 
-                # break
+                    scan_start_time = datetime.strptime(scan['start_time'], '%Y/%m/%d/%H:%M:%S')
+                    scan_start_time = scan_start_time.strftime('%j:%H:%M:%S')
+                    scan_start_time = datetime.strptime(scan_start_time, '%j:%H:%M:%S')
+
+                    next_scan_start_time = scan_start_time + timedelta(seconds=scan['observation_time'][0])
+
+                    if scan_start_time < read_time < next_scan_start_time:
+                        tsys_per_channel.append([float(t_sys) for t_sys in line_parts[2:-2]])
+                        print(line)
+
+        else:
+            for i, line in enumerate(lines):
+                if '=no' + scan['scan_no'] in line:
+                    scan_start_line_number = i
+                    print(line)
+
+            for i, line in enumerate(lines[scan_start_line_number + 1:]):
+                if ('!' not in line):
+                    line_parts = line.split(' ')
+                    tsys_per_channel.append([float(t_sys) for t_sys in line_parts[2:-2]])
+                    print(line)
+
+                if 'scan' in line and scan_no not in line:
+                    break
 
 
-            if 'scan' in line and scan_no not in line:
-                break
+    tsys_per_channel = np.array(tsys_per_channel)
+    tsys_mean = np.mean(tsys_per_channel, axis = 0)
+    print(tsys_mean)
 
-        # print(tsys_per_channel)
-        # print(len(tsys_per_channel))
-
-        tsys_per_channel = np.array(tsys_per_channel)
-        tsys_mean = np.mean(tsys_per_channel, axis = 0)
-        # print(len(tsys_mean))
-        print(tsys_mean)
-
-            # if ('!' not in line and
-            #     'GAIN' not in line and
-            #     'POLY' not in line and
-            #     'TSYS' not in line and
-            #     'INDEX' not in line and
-            #     '/' not in line and
-            #     line_parts[0] != '\n'):
-            #
-            #     print(line_parts[0])
-            #     print(type(scan_no))
-            #     break
+    # return np.mean(tsys_per_channel)
+    return tsys_mean
 
 
 
+
+def create_SYSCAL_table():
+
+    for i, scan in enumerate(scans[start_scan:end_scan]):
+        tb.close()
+
+        tb.create("myempty.ms", tabdesc, dminfo=dmi)
 
 
 
@@ -916,6 +935,9 @@ def create_noisy_ms(scans, freq_setup, integration_time, npol, flux_sources,
 
     print('Creating noisy measurement set for each scan.')
 
+    k = qa.constants('k')['value']
+    eta_a = 0.8  # aperature efficiency
+
     nbits = 2.0  # It's standard to have two bits
     eta_c = (0.88 if nbits == 2 else 0.64)  # Correlation efficient remains 0.88 if nbits = 2
     # nbase = len(mylengths)                  # Number of baselines
@@ -924,7 +946,7 @@ def create_noisy_ms(scans, freq_setup, integration_time, npol, flux_sources,
     antabfs_directory_files = glob.glob(antabfs_files_address + '*')
 
     sigma_array = []
-    for scan in scans[start_scan:end_scan]:
+    for i, scan in enumerate(scans[start_scan:end_scan]):
 
         print('\n')
         print(scan['scan_no'])
@@ -936,16 +958,29 @@ def create_noisy_ms(scans, freq_setup, integration_time, npol, flux_sources,
         participating_stations_sefds = []
         for station in scan['participating_stations']:
             for antabfs_file in antabfs_directory_files:
-                # print(file)
                 if station.lower() in antabfs_file and '.ps' not in antabfs_file:
                     print(antabfs_file)
                     break
 
-            read_tsys(antabfs_file, scan['scan_no'])
-            break
-            # participating_stations_sefds.append(SEFD_dic[station])
+            t_sys = read_tsys(antabfs_file, scan, station, scans[i+1])
 
-        break
+            station_full_name = station_abbrev_dic[station]
+            station_dia = dia_dic[station_full_name]
+
+            station_area_eff = eta_a * (np.pi * (station_dia / 2) ** 2)
+
+            sefd = 2 * k * t_sys / station_area_eff
+            sefd = sefd / 1E-26
+
+            print(sefd)
+
+            sefd = np.mean(sefd)
+
+            # break
+            participating_stations_sefds.append(sefd)
+
+        print(participating_stations_sefds)
+        # break
 
         # Calculating overall SEFD
         participating_stations_sefds = np.array(participating_stations_sefds)
@@ -977,11 +1012,11 @@ def create_noisy_ms(scans, freq_setup, integration_time, npol, flux_sources,
         print(scan['source_name'], scan['start_time'], scan['observation_time'])
 
         # Specifying name of noisy measurement set
-        ms_name = 'scan_' + scan['scan_no'] + '.ms'
+        ms_name = 'individual_scans/scan_' + scan['scan_no'] + '.ms'
         noisy_ms_name = ms_name[:-3] + '.noisy.ms'
 
-        # Reading files present in the current working directory
-        current_files = glob.glob('*')
+        # Reading files present in the individual_scans directory
+        current_files = glob.glob('individual_scans/*')
 
         # Deleting existing (if any) noisy measurement set
         if noisy_ms_name in current_files:
@@ -1029,8 +1064,8 @@ def corrupt_model_data(scans, pix_res, start_scan, end_scan, modes):
         #                      antresppath='vp_tables/scan_' + scan['scan_no'] + '_vp.tab')
 
         ms_name = 'individual_scans/scan_' + scan['scan_no'] + '.ms'
-        # noisy_ms_name = ms_name[:-3] + '.noisy.ms'
-        noisy_ms_name = ms_name
+        noisy_ms_name = ms_name[:-3] + '.noisy.ms'
+        # noisy_ms_name = ms_name
 
         im.open(noisy_ms_name, usescratch=True)
         im.selectvis()
@@ -1066,6 +1101,9 @@ def corrupt_model_data(scans, pix_res, start_scan, end_scan, modes):
             im.ft(model=('model_images/more/' + 'new_user_gaussian.im'),
                   incremental=False)
         else:
+            print(os.getcwd())
+            print('model_images/' +
+                     scan['source_name'] + '.modelimage.im')
             im.ft(model=('model_images/' +
                      scan['source_name'] + '.modelimage.im'),
                  incremental=False)
