@@ -108,8 +108,6 @@ file_object.write('Source'.ljust(14) +
                   '\n')
 
 
-# freq = '86E+09'
-
 
 for source_name in sources.keys():
 
