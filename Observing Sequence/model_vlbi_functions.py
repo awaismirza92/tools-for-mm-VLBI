@@ -890,8 +890,10 @@ def read_tsys(antabfs_file, scan, station, next_scan):
                     next_scan_start_time = scan_start_time + timedelta(seconds=scan['observation_time'][0])
 
                     if scan_start_time < read_time < next_scan_start_time:
-                        tsys_per_channel.append([float(t_sys) for t_sys in line_parts[2:-2]])
-                        print(line)
+                        tsys_per_channel.append([float(t_sys.strip())
+                                                 for t_sys in line_parts[2:]
+                                                 if t_sys not in ['', '\n']])
+                        # print(line)
 
         else:
             for i, line in enumerate(lines):
@@ -902,29 +904,113 @@ def read_tsys(antabfs_file, scan, station, next_scan):
             for i, line in enumerate(lines[scan_start_line_number + 1:]):
                 if ('!' not in line):
                     line_parts = line.split(' ')
-                    tsys_per_channel.append([float(t_sys) for t_sys in line_parts[2:-2]])
-                    print(line)
+                    # print(line_parts)
+                    tsys_per_channel.append([float(t_sys.strip())
+                                             for t_sys in line_parts[2:]
+                                             if t_sys not in ['', '\n']])
+                    # print(tsys_per_channel[i-1])
 
                 if 'scan' in line and scan_no not in line:
                     break
 
 
     tsys_per_channel = np.array(tsys_per_channel)
-    tsys_mean = np.mean(tsys_per_channel, axis = 0)
-    print(tsys_mean)
+    mean_tsys_per_channel = np.mean(tsys_per_channel, axis = 0)
+    print(mean_tsys_per_channel)
 
-    # return np.mean(tsys_per_channel)
-    return tsys_mean
+    station_full_name = station_abbrev_dic[station]
+    station_dia = dia_dic[station_full_name]
+
+    k = qa.constants('k')['value']
+    eta_a = 0.8  # aperature efficiency
+
+    station_area_eff = eta_a * (np.pi * (station_dia / 2) ** 2)
+
+    sefd = 2 * k * mean_tsys_per_channel / station_area_eff
+    sefd = sefd / 1E-26
+
+    return sefd
 
 
 
 
-def create_SYSCAL_table():
+def create_SYSCAL_table(scans, start_scan, end_scan):
 
     for i, scan in enumerate(scans[start_scan:end_scan]):
+
         tb.close()
 
-        tb.create("myempty.ms", tabdesc, dminfo=dmi)
+        # Specifying name of noisy measurement set
+        ms_name = 'individual_scans/scan_' + scan['scan_no'] + '.ms'
+        noisy_ms_name = 'individual_scans/scan_' + scan['scan_no'] + '.noisy.ms'
+
+        # Reading files present in the individual_scans directory
+        current_files = glob.glob('individual_scans/*')
+
+        # Deleting existing (if any) noisy measurement set
+        if noisy_ms_name in current_files:
+            shutil.rmtree(noisy_ms_name)
+            print('Removed previously present: ' + noisy_ms_name)
+
+        print(glob.glob('individual_scans/*'))
+
+        # Creating a noisy measurement set
+        os.system('cp -r ' + ms_name + ' ' + noisy_ms_name)
+
+
+        desc = {}
+        for i in range(16):
+            desc['TSYS_CH{}'.format(i)] = {'comment': 'System temperature for each channel',
+                                          # 'ndim': -2,
+                                          'option': 0,
+                                          'dataManagerGroup': 'StandardStMan',
+                                          'maxlen': 0,
+                                          'keywords': {'QuantumUnits': np.array(['K'], dtype='|S2')},
+                                          'dataManagerType': 'StandardStMan',
+                                          'valueType': 'float'
+                                           }
+
+
+        syscal_dir = noisy_ms_name + "/SYSCAL"
+        # # Reading files present in the noisy_ms directory
+        # current_files = glob.glob('noisy_ms_name/*')
+        #
+        # if syscal_dir in current_files:
+        #     shutil.rmtree(syscal_dir, ignore_errors=True)
+        #     print('Removed previously present: ' + syscal_dir)
+        tb.create(syscal_dir, tabledesc=desc)
+
+        # Reading files present in the antabsfs files directory
+        antabfs_directory_files = glob.glob(antabfs_files_address + '*')
+
+        participating_stations_sefds = []
+        for j, station in enumerate(scan['participating_stations']):
+            for antabfs_file in antabfs_directory_files:
+                if station.lower() in antabfs_file and '.ps' not in antabfs_file:
+                    print(antabfs_file)
+                    break
+
+            sefd = read_tsys(antabfs_file, scan, station, scans[i+1])
+
+            print(sefd)
+
+            participating_stations_sefds.append(sefd)
+
+            tb.addrows(1)
+            for i, sefd_val in enumerate(sefd):
+                # print(sefd_val)
+                tb.putcol('TSYS_CH{}'.format(i), value=sefd_val, startrow=j,
+                          nrow=1)
+                # break
+
+
+
+        # print(participating_stations_sefds)
+
+
+
+
+        tb.close()
 
 
 
@@ -934,9 +1020,6 @@ def create_noisy_ms(scans, freq_setup, integration_time, npol, flux_sources,
     #       + "with previously computed rms noise. New noisy MS will be created.")
 
     print('Creating noisy measurement set for each scan.')
-
-    k = qa.constants('k')['value']
-    eta_a = 0.8  # aperature efficiency
 
     nbits = 2.0  # It's standard to have two bits
     eta_c = (0.88 if nbits == 2 else 0.64)  # Correlation efficient remains 0.88 if nbits = 2
@@ -962,25 +1045,15 @@ def create_noisy_ms(scans, freq_setup, integration_time, npol, flux_sources,
                     print(antabfs_file)
                     break
 
-            t_sys = read_tsys(antabfs_file, scan, station, scans[i+1])
-
-            station_full_name = station_abbrev_dic[station]
-            station_dia = dia_dic[station_full_name]
-
-            station_area_eff = eta_a * (np.pi * (station_dia / 2) ** 2)
-
-            sefd = 2 * k * t_sys / station_area_eff
-            sefd = sefd / 1E-26
+            sefd = read_tsys(antabfs_file, scan, station, scans[i+1])
 
             print(sefd)
 
             sefd = np.mean(sefd)
 
-            # break
             participating_stations_sefds.append(sefd)
 
         print(participating_stations_sefds)
-        # break
 
         # Calculating overall SEFD
         participating_stations_sefds = np.array(participating_stations_sefds)
